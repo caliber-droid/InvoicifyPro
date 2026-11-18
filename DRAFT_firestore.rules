@@ -1,0 +1,823 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Pillar 4.1: Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Reusable hardened primitives
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwnerUid(uid) {
+      return isVerified() && request.auth.uid == uid;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isAdmin() {
+      return isVerified() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        request.auth.token.email == 'gaetan.boussegui@gmail.com'
+      );
+    }
+
+    function isStr(val, minLen, maxLen) {
+      return val is string && val.size() >= minLen && val.size() <= maxLen;
+    }
+
+    function isOptStr(data, key, maxLen) {
+      return !(key in data) || (data[key] is string && data[key].size() <= maxLen);
+    }
+
+    function isIntRange(val, minVal, maxVal) {
+      return val is int && val >= minVal && val <= maxVal;
+    }
+
+    function isBoundedItemsList(items, minLen, maxLen) {
+      return items is list && items.size() >= minLen && items.size() <= maxLen && (
+        items.size() == 0 || (
+          items[0] is map &&
+          'description' in items[0] &&
+          items[0].description is string &&
+          items[0].description.size() <= 300
+        )
+      );
+    }
+
+    // --- Validation Blueprints ---
+
+    function isValidUserAccount(data) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'role', 'onboarded', 'plan', 'billingCycle', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'displayName', 'role', 'onboarded', 'plan', 'billingCycle', 'createdAt', 'updatedAt'])
+        && isValidId(data.uid)
+        && isStr(data.email, 3, 254)
+        && isStr(data.displayName, 1, 120)
+        && data.role in ['owner', 'admin']
+        && data.onboarded is bool
+        && data.plan in ['free', 'starter', 'pro', 'business']
+        && data.billingCycle in ['monthly', 'annual']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidBusinessProfile(data) {
+      return data.keys().hasAll([
+          'ownerId', 'businessName', 'ownerName', 'businessEmail', 'businessType',
+          'defaultCurrency', 'defaultPaymentTerms', 'invoiceNumberFormat',
+          'nextInvoiceNumber', 'defaultTaxRateBps', 'defaultDueDays', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'businessName', 'ownerName', 'businessEmail', 'phone', 'website',
+          'address', 'logoDataUrl', 'businessType', 'industry', 'taxIdLast4',
+          'defaultCurrency', 'defaultPaymentTerms', 'invoiceNumberFormat',
+          'nextInvoiceNumber', 'defaultTaxRateBps', 'taxLabel', 'preferredPaymentMethods',
+          'timezone', 'defaultDueDays', 'reminderSchedule', 'notificationPrefs',
+          'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.ownerId)
+        && isStr(data.businessName, 1, 160)
+        && isStr(data.ownerName, 1, 120)
+        && isStr(data.businessEmail, 3, 254)
+        && isOptStr(data, 'phone', 40)
+        && isOptStr(data, 'website', 240)
+        && isOptStr(data, 'address', 400)
+        && isOptStr(data, 'logoDataUrl', 250000)
+        && isStr(data.businessType, 1, 60)
+        && isOptStr(data, 'industry', 100)
+        && isOptStr(data, 'taxIdLast4', 16)
+        && data.defaultCurrency == 'USD'
+        && isStr(data.defaultPaymentTerms, 1, 40)
+        && isStr(data.invoiceNumberFormat, 1, 40)
+        && isIntRange(data.nextInvoiceNumber, 1, 10000000)
+        && isIntRange(data.defaultTaxRateBps, 0, 5000)
+        && isOptStr(data, 'taxLabel', 40)
+        && (!('preferredPaymentMethods' in data) || (
+          data.preferredPaymentMethods is list &&
+          data.preferredPaymentMethods.size() <= 10 &&
+          (data.preferredPaymentMethods.size() == 0 || data.preferredPaymentMethods[0] is string)
+        ))
+        && isOptStr(data, 'timezone', 80)
+        && isIntRange(data.defaultDueDays, 0, 365)
+        && (!('reminderSchedule' in data) || data.reminderSchedule is map)
+        && (!('notificationPrefs' in data) || data.notificationPrefs is map)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidClient(data) {
+      return data.keys().hasAll(['ownerId', 'name', 'email', 'archived', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly([
+          'ownerId', 'name', 'companyName', 'email', 'phone', 'billingAddress',
+          'website', 'category', 'notes', 'archived', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.ownerId)
+        && isStr(data.name, 1, 140)
+        && isOptStr(data, 'companyName', 160)
+        && isStr(data.email, 3, 254)
+        && isOptStr(data, 'phone', 40)
+        && isOptStr(data, 'billingAddress', 400)
+        && isOptStr(data, 'website', 240)
+        && isOptStr(data, 'category', 60)
+        && isOptStr(data, 'notes', 2000)
+        && data.archived is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidInvoice(data) {
+      return data.keys().hasAll([
+          'ownerId', 'clientId', 'clientName', 'clientEmail', 'invoiceNumber',
+          'issueDate', 'dueDate', 'status', 'template', 'items',
+          'subtotalCents', 'discountCents', 'taxRateBps', 'taxCents',
+          'totalCents', 'amountPaidCents', 'balanceDueCents', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'clientId', 'clientName', 'clientEmail', 'invoiceNumber',
+          'issueDate', 'dueDate', 'status', 'template', 'items',
+          'subtotalCents', 'discountCents', 'taxRateBps', 'taxCents',
+          'totalCents', 'amountPaidCents', 'balanceDueCents',
+          'paymentInstructions', 'notes', 'terms', 'publicShareToken',
+          'sentAt', 'paidAt', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.ownerId)
+        && isValidId(data.clientId)
+        && isStr(data.clientName, 1, 140)
+        && isStr(data.clientEmail, 3, 254)
+        && isStr(data.invoiceNumber, 1, 40)
+        && isStr(data.issueDate, 8, 20)
+        && isStr(data.dueDate, 8, 20)
+        && data.status in ['draft', 'sent', 'viewed', 'partially_paid', 'paid', 'overdue', 'void', 'refunded']
+        && data.template in ['minimal', 'corporate', 'modern', 'creative', 'elegant', 'professional']
+        && isBoundedItemsList(data.items, 1, 50)
+        && isIntRange(data.subtotalCents, 0, 1000000000)
+        && isIntRange(data.discountCents, 0, 1000000000)
+        && isIntRange(data.taxRateBps, 0, 5000)
+        && isIntRange(data.taxCents, 0, 1000000000)
+        && isIntRange(data.totalCents, 0, 1000000000)
+        && isIntRange(data.amountPaidCents, 0, 1000000000)
+        && isIntRange(data.balanceDueCents, 0, 1000000000)
+        && isOptStr(data, 'paymentInstructions', 1000)
+        && isOptStr(data, 'notes', 2000)
+        && isOptStr(data, 'terms', 2000)
+        && isOptStr(data, 'publicShareToken', 128)
+        && isOptStr(data, 'sentAt', 40)
+        && isOptStr(data, 'paidAt', 40)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidEstimate(data) {
+      return data.keys().hasAll([
+          'ownerId', 'clientId', 'clientName', 'clientEmail', 'estimateNumber',
+          'issueDate', 'expirationDate', 'status', 'items',
+          'subtotalCents', 'discountCents', 'taxRateBps', 'taxCents',
+          'totalCents', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'clientId', 'clientName', 'clientEmail', 'estimateNumber',
+          'issueDate', 'expirationDate', 'status', 'items', 'optionalItems',
+          'subtotalCents', 'discountCents', 'taxRateBps', 'taxCents',
+          'totalCents', 'notes', 'terms', 'clientComment',
+          'convertedInvoiceId', 'publicShareToken', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.ownerId)
+        && isValidId(data.clientId)
+        && isStr(data.clientName, 1, 140)
+        && isStr(data.clientEmail, 3, 254)
+        && isStr(data.estimateNumber, 1, 40)
+        && isStr(data.issueDate, 8, 20)
+        && isStr(data.expirationDate, 8, 20)
+        && data.status in ['draft', 'sent', 'viewed', 'accepted', 'rejected', 'expired', 'converted']
+        && isBoundedItemsList(data.items, 1, 50)
+        && (!('optionalItems' in data) || isBoundedItemsList(data.optionalItems, 0, 20))
+        && isIntRange(data.subtotalCents, 0, 1000000000)
+        && isIntRange(data.discountCents, 0, 1000000000)
+        && isIntRange(data.taxRateBps, 0, 5000)
+        && isIntRange(data.taxCents, 0, 1000000000)
+        && isIntRange(data.totalCents, 0, 1000000000)
+        && isOptStr(data, 'notes', 2000)
+        && isOptStr(data, 'terms', 2000)
+        && isOptStr(data, 'clientComment', 1000)
+        && isOptStr(data, 'convertedInvoiceId', 128)
+        && isOptStr(data, 'publicShareToken', 128)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidPayment(data) {
+      return data.keys().hasAll([
+          'ownerId', 'invoiceId', 'invoiceNumber', 'clientId', 'clientName',
+          'amountCents', 'paymentDate', 'method', 'status', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'invoiceId', 'invoiceNumber', 'clientId', 'clientName',
+          'amountCents', 'paymentDate', 'method', 'reference', 'notes', 'status', 'createdAt'
+        ])
+        && isValidId(data.ownerId)
+        && isValidId(data.invoiceId)
+        && isStr(data.invoiceNumber, 1, 40)
+        && isValidId(data.clientId)
+        && isStr(data.clientName, 1, 140)
+        && isIntRange(data.amountCents, 1, 1000000000)
+        && isStr(data.paymentDate, 8, 20)
+        && data.method in ['credit_card', 'debit_card', 'ach', 'paypal', 'cash', 'check', 'other']
+        && isOptStr(data, 'reference', 120)
+        && isOptStr(data, 'notes', 1000)
+        && data.status in ['completed', 'refunded']
+        && data.createdAt is timestamp;
+    }
+
+    function isValidExpense(data) {
+      return data.keys().hasAll([
+          'ownerId', 'description', 'amountCents', 'taxCents', 'date',
+          'category', 'vendor', 'paymentMethod', 'aiExtracted', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'description', 'amountCents', 'taxCents', 'date',
+          'category', 'vendor', 'paymentMethod', 'notes', 'receiptName',
+          'receiptDataUrl', 'aiExtracted', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.ownerId)
+        && isStr(data.description, 1, 240)
+        && isIntRange(data.amountCents, 1, 1000000000)
+        && isIntRange(data.taxCents, 0, 1000000000)
+        && isStr(data.date, 8, 20)
+        && isStr(data.category, 1, 60)
+        && isStr(data.vendor, 1, 140)
+        && isStr(data.paymentMethod, 1, 60)
+        && isOptStr(data, 'notes', 1000)
+        && isOptStr(data, 'receiptName', 180)
+        && isOptStr(data, 'receiptDataUrl', 350000)
+        && data.aiExtracted is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidRecurringProfile(data) {
+      return data.keys().hasAll([
+          'ownerId', 'clientId', 'clientName', 'clientEmail', 'title', 'frequency',
+          'startDate', 'nextRunDate', 'paymentTermsDays', 'items', 'taxRateBps',
+          'totalCents', 'status', 'autoNotify', 'runCount', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'clientId', 'clientName', 'clientEmail', 'title', 'frequency',
+          'customIntervalDays', 'startDate', 'endDate', 'nextRunDate', 'lastRunDate',
+          'paymentTermsDays', 'items', 'taxRateBps', 'totalCents', 'status',
+          'autoNotify', 'runCount', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.ownerId)
+        && isValidId(data.clientId)
+        && isStr(data.clientName, 1, 140)
+        && isStr(data.clientEmail, 3, 254)
+        && isStr(data.title, 1, 160)
+        && data.frequency in ['weekly', 'biweekly', 'monthly', 'quarterly', 'annual', 'custom']
+        && (!('customIntervalDays' in data) || isIntRange(data.customIntervalDays, 1, 365))
+        && isStr(data.startDate, 8, 20)
+        && isOptStr(data, 'endDate', 20)
+        && isStr(data.nextRunDate, 8, 20)
+        && isOptStr(data, 'lastRunDate', 20)
+        && isIntRange(data.paymentTermsDays, 0, 365)
+        && isBoundedItemsList(data.items, 1, 50)
+        && isIntRange(data.taxRateBps, 0, 5000)
+        && isIntRange(data.totalCents, 0, 1000000000)
+        && data.status in ['active', 'paused', 'cancelled']
+        && data.autoNotify is bool
+        && isIntRange(data.runCount, 0, 100000)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidReminder(data) {
+      return data.keys().hasAll([
+          'ownerId', 'invoiceId', 'invoiceNumber', 'clientId', 'clientName',
+          'clientEmail', 'tone', 'subject', 'body', 'scheduledFor', 'status',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'invoiceId', 'invoiceNumber', 'clientId', 'clientName',
+          'clientEmail', 'tone', 'subject', 'body', 'scheduledFor', 'status',
+          'deliveryMethod', 'sentAt', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.ownerId)
+        && isValidId(data.invoiceId)
+        && isStr(data.invoiceNumber, 1, 40)
+        && isValidId(data.clientId)
+        && isStr(data.clientName, 1, 140)
+        && isStr(data.clientEmail, 3, 254)
+        && data.tone in ['friendly', 'professional', 'polite', 'firm', 'final_notice']
+        && isStr(data.subject, 1, 240)
+        && isStr(data.body, 1, 5000)
+        && isStr(data.scheduledFor, 8, 30)
+        && data.status in ['scheduled', 'sent', 'cancelled']
+        && isOptStr(data, 'deliveryMethod', 40)
+        && isOptStr(data, 'sentAt', 40)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidNotification(data) {
+      return data.keys().hasAll(['ownerId', 'type', 'title', 'message', 'read', 'createdAt'])
+        && data.keys().hasOnly(['ownerId', 'type', 'title', 'message', 'read', 'entityType', 'entityId', 'createdAt'])
+        && isValidId(data.ownerId)
+        && isStr(data.type, 1, 60)
+        && isStr(data.title, 1, 160)
+        && isStr(data.message, 1, 500)
+        && data.read is bool
+        && isOptStr(data, 'entityType', 40)
+        && isOptStr(data, 'entityId', 128)
+        && data.createdAt is timestamp;
+    }
+
+    function isValidVaultDocument(data) {
+      return data.keys().hasAll(['ownerId', 'title', 'category', 'fileName', 'mimeType', 'sizeBytes', 'createdAt'])
+        && data.keys().hasOnly(['ownerId', 'title', 'category', 'clientId', 'clientName', 'relatedId', 'fileName', 'mimeType', 'sizeBytes', 'fileDataUrl', 'createdAt'])
+        && isValidId(data.ownerId)
+        && isStr(data.title, 1, 200)
+        && data.category in ['invoice', 'estimate', 'receipt', 'payment_confirmation', 'agreement', 'supporting']
+        && isOptStr(data, 'clientId', 128)
+        && isOptStr(data, 'clientName', 140)
+        && isOptStr(data, 'relatedId', 128)
+        && isStr(data.fileName, 1, 200)
+        && isStr(data.mimeType, 1, 100)
+        && isIntRange(data.sizeBytes, 0, 50000000)
+        && isOptStr(data, 'fileDataUrl', 350000)
+        && data.createdAt is timestamp;
+    }
+
+    function isValidAiConversation(data) {
+      return data.keys().hasAll(['ownerId', 'title', 'messages', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['ownerId', 'title', 'messages', 'createdAt', 'updatedAt'])
+        && isValidId(data.ownerId)
+        && isStr(data.title, 1, 160)
+        && data.messages is list
+        && data.messages.size() <= 100
+        && (data.messages.size() == 0 || (
+          data.messages[0] is map &&
+          'role' in data.messages[0] &&
+          data.messages[0].role is string
+        ))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAuditLog(data) {
+      return data.keys().hasAll(['ownerId', 'action', 'entityType', 'entityId', 'summary', 'createdAt'])
+        && data.keys().hasOnly(['ownerId', 'action', 'entityType', 'entityId', 'summary', 'createdAt'])
+        && isValidId(data.ownerId)
+        && isStr(data.action, 1, 80)
+        && isStr(data.entityType, 1, 40)
+        && isStr(data.entityId, 1, 128)
+        && isStr(data.summary, 1, 500)
+        && data.createdAt is timestamp;
+    }
+
+    function isValidPortalShare(data) {
+      return data.keys().hasAll([
+          'ownerId', 'kind', 'targetId', 'businessName', 'clientName', 'docNumber',
+          'issueDate', 'dueDate', 'items', 'subtotalCents', 'discountCents',
+          'taxCents', 'totalCents', 'amountPaidCents', 'balanceDueCents',
+          'status', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'kind', 'targetId', 'businessName', 'businessEmail', 'clientName',
+          'docNumber', 'issueDate', 'dueDate', 'template', 'items', 'subtotalCents',
+          'discountCents', 'taxCents', 'totalCents', 'amountPaidCents', 'balanceDueCents',
+          'status', 'notes', 'terms', 'clientDecision', 'clientComment', 'decidedAt',
+          'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.ownerId)
+        && data.kind in ['invoice', 'estimate']
+        && isValidId(data.targetId)
+        && isStr(data.businessName, 1, 160)
+        && isOptStr(data, 'businessEmail', 254)
+        && isStr(data.clientName, 1, 140)
+        && isStr(data.docNumber, 1, 40)
+        && isStr(data.issueDate, 8, 20)
+        && isStr(data.dueDate, 8, 20)
+        && isOptStr(data, 'template', 40)
+        && isBoundedItemsList(data.items, 1, 50)
+        && isIntRange(data.subtotalCents, 0, 1000000000)
+        && isIntRange(data.discountCents, 0, 1000000000)
+        && isIntRange(data.taxCents, 0, 1000000000)
+        && isIntRange(data.totalCents, 0, 1000000000)
+        && isIntRange(data.amountPaidCents, 0, 1000000000)
+        && isIntRange(data.balanceDueCents, 0, 1000000000)
+        && isStr(data.status, 1, 40)
+        && isOptStr(data, 'notes', 2000)
+        && isOptStr(data, 'terms', 2000)
+        && (!('clientDecision' in data) || data.clientDecision in ['pending', 'accepted', 'rejected'])
+        && isOptStr(data, 'clientComment', 1000)
+        && isOptStr(data, 'decidedAt', 40)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // --- Collection Match Blocks ---
+
+    match /admins/{adminId} {
+      allow get: if isValidId(adminId) && (isOwnerUid(adminId) || isAdmin());
+      allow list: if false;
+      allow create, update, delete: if false;
+    }
+
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwnerUid(userId) || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isValidId(userId)
+        && isOwnerUid(userId)
+        && isValidUserAccount(incoming())
+        && incoming().uid == userId
+        && incoming().role == 'owner'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(userId)
+        && isValidUserAccount(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            isOwnerUid(userId) &&
+            incoming().role == existing().role &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'onboarded', 'plan', 'billingCycle', 'updatedAt'])
+          )
+        );
+      allow delete: if isValidId(userId) && (isOwnerUid(userId) || isAdmin());
+    }
+
+    match /businessProfiles/{userId} {
+      allow get: if isValidId(userId) && (isOwnerUid(userId) || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isValidId(userId)
+        && isOwnerUid(userId)
+        && isValidBusinessProfile(incoming())
+        && incoming().ownerId == userId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(userId)
+        && isValidBusinessProfile(incoming())
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            isOwnerUid(userId) &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'businessName', 'ownerName', 'businessEmail', 'phone', 'website',
+              'address', 'logoDataUrl', 'businessType', 'industry', 'taxIdLast4',
+              'defaultPaymentTerms', 'invoiceNumberFormat', 'nextInvoiceNumber',
+              'defaultTaxRateBps', 'taxLabel', 'preferredPaymentMethods',
+              'timezone', 'defaultDueDays', 'reminderSchedule', 'notificationPrefs',
+              'updatedAt'
+            ])
+          )
+        );
+      allow delete: if isValidId(userId) && (isOwnerUid(userId) || isAdmin());
+    }
+
+    match /clients/{clientId} {
+      allow get: if isValidId(clientId) && (isOwnerUid(existing().ownerId) || isAdmin());
+      allow list: if (isVerified() && resource.data.ownerId == request.auth.uid) || isAdmin();
+      allow create: if isValidId(clientId)
+        && isVerified()
+        && isValidClient(incoming())
+        && incoming().ownerId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(clientId)
+        && isValidClient(incoming())
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            isOwnerUid(existing().ownerId) &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'name', 'companyName', 'email', 'phone', 'billingAddress',
+              'website', 'category', 'notes', 'archived', 'updatedAt'
+            ])
+          )
+        );
+      allow delete: if isValidId(clientId) && (isOwnerUid(existing().ownerId) || isAdmin());
+    }
+
+    match /invoices/{invoiceId} {
+      allow get: if isValidId(invoiceId) && (isOwnerUid(existing().ownerId) || isAdmin());
+      allow list: if (isVerified() && resource.data.ownerId == request.auth.uid) || isAdmin();
+      allow create: if isValidId(invoiceId)
+        && isVerified()
+        && isValidInvoice(incoming())
+        && incoming().ownerId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/clients/$(incoming().clientId))
+        && get(/databases/$(database)/documents/clients/$(incoming().clientId)).data.ownerId == request.auth.uid;
+      allow update: if isValidId(invoiceId)
+        && isValidInvoice(incoming())
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            isOwnerUid(existing().ownerId) &&
+            !(existing().status in ['void', 'refunded']) &&
+            (
+              // Action: Edit invoice details / draft
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'clientId', 'clientName', 'clientEmail', 'invoiceNumber',
+                'issueDate', 'dueDate', 'template', 'items', 'subtotalCents',
+                'discountCents', 'taxRateBps', 'taxCents', 'totalCents',
+                'balanceDueCents', 'paymentInstructions', 'notes', 'terms',
+                'publicShareToken', 'updatedAt'
+              ]) ||
+              // Action: Send or update delivery status
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'status', 'publicShareToken', 'sentAt', 'updatedAt'
+              ]) ||
+              // Action: Record payment / paid status
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'status', 'amountPaidCents', 'balanceDueCents', 'paidAt', 'updatedAt'
+              ])
+            )
+          )
+        );
+      allow delete: if isValidId(invoiceId)
+        && (isAdmin() || (isOwnerUid(existing().ownerId) && existing().status == 'draft'));
+    }
+
+    match /estimates/{estimateId} {
+      allow get: if isValidId(estimateId) && (isOwnerUid(existing().ownerId) || isAdmin());
+      allow list: if (isVerified() && resource.data.ownerId == request.auth.uid) || isAdmin();
+      allow create: if isValidId(estimateId)
+        && isVerified()
+        && isValidEstimate(incoming())
+        && incoming().ownerId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/clients/$(incoming().clientId))
+        && get(/databases/$(database)/documents/clients/$(incoming().clientId)).data.ownerId == request.auth.uid;
+      allow update: if isValidId(estimateId)
+        && isValidEstimate(incoming())
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            isOwnerUid(existing().ownerId) &&
+            !(existing().status in ['converted', 'rejected', 'expired']) &&
+            (
+              // Action: Edit estimate content
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'clientId', 'clientName', 'clientEmail', 'estimateNumber',
+                'issueDate', 'expirationDate', 'items', 'optionalItems',
+                'subtotalCents', 'discountCents', 'taxRateBps', 'taxCents',
+                'totalCents', 'notes', 'terms', 'publicShareToken', 'updatedAt'
+              ]) ||
+              // Action: Status / client approval / convert to invoice
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'status', 'clientComment', 'convertedInvoiceId', 'publicShareToken', 'updatedAt'
+              ])
+            )
+          )
+        );
+      allow delete: if isValidId(estimateId)
+        && (isAdmin() || (isOwnerUid(existing().ownerId) && existing().status == 'draft'));
+    }
+
+    match /payments/{paymentId} {
+      allow get: if isValidId(paymentId) && (isOwnerUid(existing().ownerId) || isAdmin());
+      allow list: if (isVerified() && resource.data.ownerId == request.auth.uid) || isAdmin();
+      allow create: if isValidId(paymentId)
+        && isVerified()
+        && isValidPayment(incoming())
+        && incoming().ownerId == request.auth.uid
+        && incoming().createdAt == request.time
+        && exists(/databases/$(database)/documents/invoices/$(incoming().invoiceId))
+        && get(/databases/$(database)/documents/invoices/$(incoming().invoiceId)).data.ownerId == request.auth.uid;
+      allow update: if isValidId(paymentId)
+        && isValidPayment(incoming())
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && (isAdmin() || (isOwnerUid(existing().ownerId) && existing().status != 'refunded' && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'notes'])));
+      allow delete: if isAdmin();
+    }
+
+    match /expenses/{expenseId} {
+      allow get: if isValidId(expenseId) && (isOwnerUid(existing().ownerId) || isAdmin());
+      allow list: if (isVerified() && resource.data.ownerId == request.auth.uid) || isAdmin();
+      allow create: if isValidId(expenseId)
+        && isVerified()
+        && isValidExpense(incoming())
+        && incoming().ownerId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(expenseId)
+        && isValidExpense(incoming())
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            isOwnerUid(existing().ownerId) &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'description', 'amountCents', 'taxCents', 'date', 'category',
+              'vendor', 'paymentMethod', 'notes', 'receiptName', 'receiptDataUrl',
+              'aiExtracted', 'updatedAt'
+            ])
+          )
+        );
+      allow delete: if isValidId(expenseId) && (isOwnerUid(existing().ownerId) || isAdmin());
+    }
+
+    match /recurringProfiles/{profileId} {
+      allow get: if isValidId(profileId) && (isOwnerUid(existing().ownerId) || isAdmin());
+      allow list: if (isVerified() && resource.data.ownerId == request.auth.uid) || isAdmin();
+      allow create: if isValidId(profileId)
+        && isVerified()
+        && isValidRecurringProfile(incoming())
+        && incoming().ownerId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/clients/$(incoming().clientId))
+        && get(/databases/$(database)/documents/clients/$(incoming().clientId)).data.ownerId == request.auth.uid;
+      allow update: if isValidId(profileId)
+        && isValidRecurringProfile(incoming())
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            isOwnerUid(existing().ownerId) &&
+            existing().status != 'cancelled' &&
+            (
+              incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']) ||
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'nextRunDate', 'lastRunDate', 'runCount', 'updatedAt'
+              ]) ||
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'title', 'frequency', 'customIntervalDays', 'endDate', 'nextRunDate',
+                'paymentTermsDays', 'items', 'taxRateBps', 'totalCents', 'autoNotify', 'updatedAt'
+              ])
+            )
+          )
+        );
+      allow delete: if isValidId(profileId) && (isOwnerUid(existing().ownerId) || isAdmin());
+    }
+
+    match /reminders/{reminderId} {
+      allow get: if isValidId(reminderId) && (isOwnerUid(existing().ownerId) || isAdmin());
+      allow list: if (isVerified() && resource.data.ownerId == request.auth.uid) || isAdmin();
+      allow create: if isValidId(reminderId)
+        && isVerified()
+        && isValidReminder(incoming())
+        && incoming().ownerId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/invoices/$(incoming().invoiceId))
+        && get(/databases/$(database)/documents/invoices/$(incoming().invoiceId)).data.ownerId == request.auth.uid;
+      allow update: if isValidId(reminderId)
+        && isValidReminder(incoming())
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            isOwnerUid(existing().ownerId) &&
+            existing().status != 'sent' &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'tone', 'subject', 'body', 'scheduledFor', 'status', 'deliveryMethod', 'sentAt', 'updatedAt'
+            ])
+          )
+        );
+      allow delete: if isValidId(reminderId) && (isOwnerUid(existing().ownerId) || isAdmin());
+    }
+
+    match /notifications/{notificationId} {
+      allow get: if isValidId(notificationId) && (isOwnerUid(existing().ownerId) || isAdmin());
+      allow list: if (isVerified() && resource.data.ownerId == request.auth.uid) || isAdmin();
+      allow create: if isValidId(notificationId)
+        && isVerified()
+        && isValidNotification(incoming())
+        && incoming().ownerId == request.auth.uid
+        && incoming().createdAt == request.time;
+      allow update: if isValidId(notificationId)
+        && isValidNotification(incoming())
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && (isAdmin() || (isOwnerUid(existing().ownerId) && incoming().diff(existing()).affectedKeys().hasOnly(['read'])));
+      allow delete: if isValidId(notificationId) && (isOwnerUid(existing().ownerId) || isAdmin());
+    }
+
+    match /documents/{documentId} {
+      allow get: if isValidId(documentId) && (isOwnerUid(existing().ownerId) || isAdmin());
+      allow list: if (isVerified() && resource.data.ownerId == request.auth.uid) || isAdmin();
+      allow create: if isValidId(documentId)
+        && isVerified()
+        && isValidVaultDocument(incoming())
+        && incoming().ownerId == request.auth.uid
+        && incoming().createdAt == request.time;
+      allow update: if isValidId(documentId)
+        && isValidVaultDocument(incoming())
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && (isAdmin() || (isOwnerUid(existing().ownerId) && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'category'])));
+      allow delete: if isValidId(documentId) && (isOwnerUid(existing().ownerId) || isAdmin());
+    }
+
+    match /aiConversations/{conversationId} {
+      allow get: if isValidId(conversationId) && (isOwnerUid(existing().ownerId) || isAdmin());
+      allow list: if (isVerified() && resource.data.ownerId == request.auth.uid) || isAdmin();
+      allow create: if isValidId(conversationId)
+        && isVerified()
+        && isValidAiConversation(incoming())
+        && incoming().ownerId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(conversationId)
+        && isValidAiConversation(incoming())
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (isAdmin() || (isOwnerUid(existing().ownerId) && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'messages', 'updatedAt'])));
+      allow delete: if isValidId(conversationId) && (isOwnerUid(existing().ownerId) || isAdmin());
+    }
+
+    match /auditLogs/{logId} {
+      allow get: if isValidId(logId) && (isOwnerUid(existing().ownerId) || isAdmin());
+      allow list: if (isVerified() && resource.data.ownerId == request.auth.uid) || isAdmin();
+      allow create: if isValidId(logId)
+        && isVerified()
+        && isValidAuditLog(incoming())
+        && incoming().ownerId == request.auth.uid
+        && incoming().createdAt == request.time;
+      allow update, delete: if false;
+    }
+
+    match /portalShares/{shareId} {
+      // Exact token get only; list is strictly forbidden to prevent token enumeration
+      allow get: if isValidId(shareId) && shareId.size() >= 16;
+      allow list: if (isVerified() && resource.data.ownerId == request.auth.uid) || isAdmin();
+      allow create: if isValidId(shareId)
+        && shareId.size() >= 16
+        && isVerified()
+        && isValidPortalShare(incoming())
+        && incoming().ownerId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(shareId)
+        && shareId.size() >= 16
+        && isValidPortalShare(incoming())
+        && incoming().ownerId == existing().ownerId
+        && incoming().targetId == existing().targetId
+        && incoming().kind == existing().kind
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            isOwnerUid(existing().ownerId) &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'status', 'amountPaidCents', 'balanceDueCents', 'items',
+              'subtotalCents', 'discountCents', 'taxCents', 'totalCents',
+              'dueDate', 'notes', 'terms', 'updatedAt'
+            ])
+          ) ||
+          (
+            existing().kind == 'estimate' &&
+            existing().clientDecision == 'pending' &&
+            incoming().clientDecision in ['accepted', 'rejected'] &&
+            incoming().status == incoming().clientDecision &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'clientDecision', 'clientComment', 'decidedAt', 'status', 'updatedAt'
+            ])
+          )
+        );
+      allow delete: if isValidId(shareId) && (isOwnerUid(existing().ownerId) || isAdmin());
+    }
+  }
+}

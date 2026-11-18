@@ -1,0 +1,6 @@
+{
+  "name": "InvoicifyPro",
+  "description": "Smart Invoicing. Faster Payments. Better Business. AI-powered invoicing, billing, expense tracking, and financial management platform for American freelancers and small businesses.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,382 @@
+{
+  "entities": {
+    "UserAccount": {
+      "title": "UserAccount",
+      "description": "Authenticated user account and subscription state",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "maxLength": 254 },
+        "displayName": { "type": "string", "maxLength": 120 },
+        "role": { "type": "string", "enum": ["owner", "admin"] },
+        "onboarded": { "type": "boolean" },
+        "plan": { "type": "string", "enum": ["free", "starter", "pro", "business"] },
+        "billingCycle": { "type": "string", "enum": ["monthly", "annual"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "displayName", "role", "onboarded", "plan", "billingCycle", "createdAt", "updatedAt"]
+    },
+    "BusinessProfile": {
+      "title": "BusinessProfile",
+      "description": "Business identity, invoicing defaults, tax settings, and notification preferences",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "businessName": { "type": "string", "maxLength": 160 },
+        "ownerName": { "type": "string", "maxLength": 120 },
+        "businessEmail": { "type": "string", "maxLength": 254 },
+        "phone": { "type": "string", "maxLength": 40 },
+        "website": { "type": "string", "maxLength": 240 },
+        "address": { "type": "string", "maxLength": 400 },
+        "logoDataUrl": { "type": "string", "maxLength": 250000 },
+        "businessType": { "type": "string", "maxLength": 60 },
+        "industry": { "type": "string", "maxLength": 100 },
+        "taxIdLast4": { "type": "string", "maxLength": 16 },
+        "defaultCurrency": { "type": "string", "enum": ["USD"] },
+        "defaultPaymentTerms": { "type": "string", "maxLength": 40 },
+        "invoiceNumberFormat": { "type": "string", "maxLength": 40 },
+        "nextInvoiceNumber": { "type": "integer" },
+        "defaultTaxRateBps": { "type": "integer" },
+        "taxLabel": { "type": "string", "maxLength": 40 },
+        "preferredPaymentMethods": { "type": "array" },
+        "timezone": { "type": "string", "maxLength": 80 },
+        "defaultDueDays": { "type": "integer" },
+        "reminderSchedule": { "type": "object" },
+        "notificationPrefs": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "businessName", "ownerName", "businessEmail", "businessType", "defaultCurrency", "defaultPaymentTerms", "invoiceNumberFormat", "nextInvoiceNumber", "defaultTaxRateBps", "defaultDueDays", "createdAt", "updatedAt"]
+    },
+    "Client": {
+      "title": "Client",
+      "description": "CRM client profile owned by a business user",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "maxLength": 140 },
+        "companyName": { "type": "string", "maxLength": 160 },
+        "email": { "type": "string", "maxLength": 254 },
+        "phone": { "type": "string", "maxLength": 40 },
+        "billingAddress": { "type": "string", "maxLength": 400 },
+        "website": { "type": "string", "maxLength": 240 },
+        "category": { "type": "string", "maxLength": 60 },
+        "notes": { "type": "string", "maxLength": 2000 },
+        "archived": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "name", "email", "archived", "createdAt", "updatedAt"]
+    },
+    "Invoice": {
+      "title": "Invoice",
+      "description": "Invoice document with integer-cent monetary totals and bounded line items",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "clientId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "clientName": { "type": "string", "maxLength": 140 },
+        "clientEmail": { "type": "string", "maxLength": 254 },
+        "invoiceNumber": { "type": "string", "maxLength": 40 },
+        "issueDate": { "type": "string", "maxLength": 20 },
+        "dueDate": { "type": "string", "maxLength": 20 },
+        "status": { "type": "string", "enum": ["draft", "sent", "viewed", "partially_paid", "paid", "overdue", "void", "refunded"] },
+        "template": { "type": "string", "enum": ["minimal", "corporate", "modern", "creative", "elegant", "professional"] },
+        "items": { "type": "array" },
+        "subtotalCents": { "type": "integer" },
+        "discountCents": { "type": "integer" },
+        "taxRateBps": { "type": "integer" },
+        "taxCents": { "type": "integer" },
+        "totalCents": { "type": "integer" },
+        "amountPaidCents": { "type": "integer" },
+        "balanceDueCents": { "type": "integer" },
+        "paymentInstructions": { "type": "string", "maxLength": 1000 },
+        "notes": { "type": "string", "maxLength": 2000 },
+        "terms": { "type": "string", "maxLength": 2000 },
+        "publicShareToken": { "type": "string", "maxLength": 128 },
+        "sentAt": { "type": "string", "maxLength": 40 },
+        "paidAt": { "type": "string", "maxLength": 40 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "clientId", "clientName", "clientEmail", "invoiceNumber", "issueDate", "dueDate", "status", "template", "items", "subtotalCents", "discountCents", "taxRateBps", "taxCents", "totalCents", "amountPaidCents", "balanceDueCents", "createdAt", "updatedAt"]
+    },
+    "Estimate": {
+      "title": "Estimate",
+      "description": "Quotation and estimate document with approval status and conversion tracking",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "clientId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "clientName": { "type": "string", "maxLength": 140 },
+        "clientEmail": { "type": "string", "maxLength": 254 },
+        "estimateNumber": { "type": "string", "maxLength": 40 },
+        "issueDate": { "type": "string", "maxLength": 20 },
+        "expirationDate": { "type": "string", "maxLength": 20 },
+        "status": { "type": "string", "enum": ["draft", "sent", "viewed", "accepted", "rejected", "expired", "converted"] },
+        "items": { "type": "array" },
+        "optionalItems": { "type": "array" },
+        "subtotalCents": { "type": "integer" },
+        "discountCents": { "type": "integer" },
+        "taxRateBps": { "type": "integer" },
+        "taxCents": { "type": "integer" },
+        "totalCents": { "type": "integer" },
+        "notes": { "type": "string", "maxLength": 2000 },
+        "terms": { "type": "string", "maxLength": 2000 },
+        "clientComment": { "type": "string", "maxLength": 1000 },
+        "convertedInvoiceId": { "type": "string", "maxLength": 128 },
+        "publicShareToken": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "clientId", "clientName", "clientEmail", "estimateNumber", "issueDate", "expirationDate", "status", "items", "subtotalCents", "discountCents", "taxRateBps", "taxCents", "totalCents", "createdAt", "updatedAt"]
+    },
+    "Payment": {
+      "title": "Payment",
+      "description": "Recorded invoice payment transaction",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "invoiceId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "invoiceNumber": { "type": "string", "maxLength": 40 },
+        "clientId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "clientName": { "type": "string", "maxLength": 140 },
+        "amountCents": { "type": "integer" },
+        "paymentDate": { "type": "string", "maxLength": 20 },
+        "method": { "type": "string", "enum": ["credit_card", "debit_card", "ach", "paypal", "cash", "check", "other"] },
+        "reference": { "type": "string", "maxLength": 120 },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "status": { "type": "string", "enum": ["completed", "refunded"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "invoiceId", "invoiceNumber", "clientId", "clientName", "amountCents", "paymentDate", "method", "status", "createdAt"]
+    },
+    "Expense": {
+      "title": "Expense",
+      "description": "Business expense entry with optional AI-extracted receipt attachment",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "description": { "type": "string", "maxLength": 240 },
+        "amountCents": { "type": "integer" },
+        "taxCents": { "type": "integer" },
+        "date": { "type": "string", "maxLength": 20 },
+        "category": { "type": "string", "maxLength": 60 },
+        "vendor": { "type": "string", "maxLength": 140 },
+        "paymentMethod": { "type": "string", "maxLength": 60 },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "receiptName": { "type": "string", "maxLength": 180 },
+        "receiptDataUrl": { "type": "string", "maxLength": 350000 },
+        "aiExtracted": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "description", "amountCents", "taxCents", "date", "category", "vendor", "paymentMethod", "aiExtracted", "createdAt", "updatedAt"]
+    },
+    "RecurringProfile": {
+      "title": "RecurringProfile",
+      "description": "Automated recurring invoice billing schedule",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "clientId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "clientName": { "type": "string", "maxLength": 140 },
+        "clientEmail": { "type": "string", "maxLength": 254 },
+        "title": { "type": "string", "maxLength": 160 },
+        "frequency": { "type": "string", "enum": ["weekly", "biweekly", "monthly", "quarterly", "annual", "custom"] },
+        "customIntervalDays": { "type": "integer" },
+        "startDate": { "type": "string", "maxLength": 20 },
+        "endDate": { "type": "string", "maxLength": 20 },
+        "nextRunDate": { "type": "string", "maxLength": 20 },
+        "lastRunDate": { "type": "string", "maxLength": 20 },
+        "paymentTermsDays": { "type": "integer" },
+        "items": { "type": "array" },
+        "taxRateBps": { "type": "integer" },
+        "totalCents": { "type": "integer" },
+        "status": { "type": "string", "enum": ["active", "paused", "cancelled"] },
+        "autoNotify": { "type": "boolean" },
+        "runCount": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "clientId", "clientName", "clientEmail", "title", "frequency", "startDate", "nextRunDate", "paymentTermsDays", "items", "taxRateBps", "totalCents", "status", "autoNotify", "runCount", "createdAt", "updatedAt"]
+    },
+    "Reminder": {
+      "title": "Reminder",
+      "description": "Scheduled or sent AI payment reminder",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "invoiceId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "invoiceNumber": { "type": "string", "maxLength": 40 },
+        "clientId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "clientName": { "type": "string", "maxLength": 140 },
+        "clientEmail": { "type": "string", "maxLength": 254 },
+        "tone": { "type": "string", "enum": ["friendly", "professional", "polite", "firm", "final_notice"] },
+        "subject": { "type": "string", "maxLength": 240 },
+        "body": { "type": "string", "maxLength": 5000 },
+        "scheduledFor": { "type": "string", "maxLength": 30 },
+        "status": { "type": "string", "enum": ["scheduled", "sent", "cancelled"] },
+        "deliveryMethod": { "type": "string", "maxLength": 40 },
+        "sentAt": { "type": "string", "maxLength": 40 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "invoiceId", "invoiceNumber", "clientId", "clientName", "clientEmail", "tone", "subject", "body", "scheduledFor", "status", "createdAt", "updatedAt"]
+    },
+    "AppNotification": {
+      "title": "AppNotification",
+      "description": "In-app billing and activity notification",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "type": { "type": "string", "maxLength": 60 },
+        "title": { "type": "string", "maxLength": 160 },
+        "message": { "type": "string", "maxLength": 500 },
+        "read": { "type": "boolean" },
+        "entityType": { "type": "string", "maxLength": 40 },
+        "entityId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "type", "title", "message", "read", "createdAt"]
+    },
+    "VaultDocument": {
+      "title": "VaultDocument",
+      "description": "Stored document vault record",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "maxLength": 200 },
+        "category": { "type": "string", "enum": ["invoice", "estimate", "receipt", "payment_confirmation", "agreement", "supporting"] },
+        "clientId": { "type": "string", "maxLength": 128 },
+        "clientName": { "type": "string", "maxLength": 140 },
+        "relatedId": { "type": "string", "maxLength": 128 },
+        "fileName": { "type": "string", "maxLength": 200 },
+        "mimeType": { "type": "string", "maxLength": 100 },
+        "sizeBytes": { "type": "integer" },
+        "fileDataUrl": { "type": "string", "maxLength": 350000 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "title", "category", "fileName", "mimeType", "sizeBytes", "createdAt"]
+    },
+    "AiConversation": {
+      "title": "AiConversation",
+      "description": "Pilot AI financial assistant conversation history",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "maxLength": 160 },
+        "messages": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "title", "messages", "createdAt", "updatedAt"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Immutable financial and document audit trail entry",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "action": { "type": "string", "maxLength": 80 },
+        "entityType": { "type": "string", "maxLength": 40 },
+        "entityId": { "type": "string", "maxLength": 128 },
+        "summary": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "action", "entityType", "entityId", "summary", "createdAt"]
+    },
+    "PortalShare": {
+      "title": "PortalShare",
+      "description": "Sanitized client-facing share link record for payment portal and estimate approval",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "kind": { "type": "string", "enum": ["invoice", "estimate"] },
+        "targetId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "businessName": { "type": "string", "maxLength": 160 },
+        "businessEmail": { "type": "string", "maxLength": 254 },
+        "clientName": { "type": "string", "maxLength": 140 },
+        "docNumber": { "type": "string", "maxLength": 40 },
+        "issueDate": { "type": "string", "maxLength": 20 },
+        "dueDate": { "type": "string", "maxLength": 20 },
+        "template": { "type": "string", "maxLength": 40 },
+        "items": { "type": "array" },
+        "subtotalCents": { "type": "integer" },
+        "discountCents": { "type": "integer" },
+        "taxCents": { "type": "integer" },
+        "totalCents": { "type": "integer" },
+        "amountPaidCents": { "type": "integer" },
+        "balanceDueCents": { "type": "integer" },
+        "status": { "type": "string", "maxLength": 40 },
+        "notes": { "type": "string", "maxLength": 2000 },
+        "terms": { "type": "string", "maxLength": 2000 },
+        "clientDecision": { "type": "string", "enum": ["pending", "accepted", "rejected"] },
+        "clientComment": { "type": "string", "maxLength": 1000 },
+        "decidedAt": { "type": "string", "maxLength": 40 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "kind", "targetId", "businessName", "clientName", "docNumber", "issueDate", "dueDate", "items", "subtotalCents", "discountCents", "taxCents", "totalCents", "amountPaidCents", "balanceDueCents", "status", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserAccount" },
+      "description": "User account records keyed by Firebase Auth UID"
+    },
+    "/businessProfiles/{userId}": {
+      "schema": { "$ref": "#/entities/BusinessProfile" },
+      "description": "Business settings and branding profiles keyed by owner UID"
+    },
+    "/clients/{clientId}": {
+      "schema": { "$ref": "#/entities/Client" },
+      "description": "Client CRM records isolated by ownerId"
+    },
+    "/invoices/{invoiceId}": {
+      "schema": { "$ref": "#/entities/Invoice" },
+      "description": "Invoices isolated by ownerId"
+    },
+    "/estimates/{estimateId}": {
+      "schema": { "$ref": "#/entities/Estimate" },
+      "description": "Estimates isolated by ownerId"
+    },
+    "/payments/{paymentId}": {
+      "schema": { "$ref": "#/entities/Payment" },
+      "description": "Payments isolated by ownerId"
+    },
+    "/expenses/{expenseId}": {
+      "schema": { "$ref": "#/entities/Expense" },
+      "description": "Expenses isolated by ownerId"
+    },
+    "/recurringProfiles/{profileId}": {
+      "schema": { "$ref": "#/entities/RecurringProfile" },
+      "description": "Recurring invoice schedules isolated by ownerId"
+    },
+    "/reminders/{reminderId}": {
+      "schema": { "$ref": "#/entities/Reminder" },
+      "description": "Payment reminders isolated by ownerId"
+    },
+    "/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/AppNotification" },
+      "description": "In-app notifications isolated by ownerId"
+    },
+    "/documents/{documentId}": {
+      "schema": { "$ref": "#/entities/VaultDocument" },
+      "description": "Document vault records isolated by ownerId"
+    },
+    "/aiConversations/{conversationId}": {
+      "schema": { "$ref": "#/entities/AiConversation" },
+      "description": "Pilot AI conversation threads isolated by ownerId"
+    },
+    "/auditLogs/{logId}": {
+      "schema": { "$ref": "#/entities/AuditLog" },
+      "description": "Audit logs isolated by ownerId"
+    },
+    "/portalShares/{shareId}": {
+      "schema": { "$ref": "#/entities/PortalShare" },
+      "description": "Client-facing invoice payment and estimate approval share snapshots"
+    }
+  }
+}
