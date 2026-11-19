@@ -8,6 +8,7 @@ import {
   ExternalLink,
   Eye,
   FilePlus2,
+  Loader2,
   Mail,
   Mic,
   MicOff,
@@ -446,13 +447,15 @@ export const InvoicesView: React.FC<{
     setPdfBusyId(inv.id);
     try {
       const client = clients.find((c) => c.id === inv.clientId);
-      const effectiveWatermark = inv.watermarkConfig ?? businessProfile?.watermarkConfig;
+      const effectiveTemplate = previewTemplateOverride[inv.id] || inv.template || 'corporate';
+      const effectiveWatermark =
+        previewWatermarkOverride[inv.id] ?? inv.watermarkConfig ?? businessProfile?.watermarkConfig;
       const resolvedWm = resolveWatermarkDisplay(effectiveWatermark, inv.status);
       await downloadPdfFromEndpoint(
         '/api/pdf/document',
         {
           kind: 'invoice',
-          template: inv.template,
+          template: effectiveTemplate,
           docNumber: inv.invoiceNumber,
           issueDate: inv.issueDate,
           dueDate: inv.dueDate,
@@ -494,6 +497,69 @@ export const InvoicesView: React.FC<{
         `Invoice-${inv.invoiceNumber}.pdf`
       );
       notify('success', 'PDF downloaded', `Invoice-${inv.invoiceNumber}.pdf saved.`);
+    } catch (err: any) {
+      notify('error', 'PDF failed', err?.message || 'Could not export PDF.');
+    } finally {
+      setPdfBusyId(null);
+    }
+  };
+
+  const handleDownloadBuilderPdf = async () => {
+    const cleanItems = items.map((it) => ({
+      ...it,
+      description: it.description.trim() || 'Service',
+    }));
+    const draftStatus = editingInv?.status || 'draft';
+    const resolvedWm = resolveWatermarkDisplay(watermarkConfig, draftStatus);
+    const busyKey = editingInv?.id || 'builder-draft';
+    setPdfBusyId(busyKey);
+    try {
+      await downloadPdfFromEndpoint(
+        '/api/pdf/document',
+        {
+          kind: 'invoice',
+          template,
+          docNumber: invoiceNumber || 'DRAFT',
+          issueDate,
+          dueDate,
+          status: draftStatus,
+          watermark: resolvedWm
+            ? {
+                text: resolvedWm.text,
+                opacityPct: resolvedWm.opacityPct,
+                angle: resolvedWm.angle,
+                color: resolvedWm.color,
+              }
+            : null,
+          business: {
+            businessName: businessProfile?.businessName || 'InvoicifyPro Business',
+            ownerName: businessProfile?.ownerName,
+            businessEmail: businessProfile?.businessEmail || '',
+            phone: businessProfile?.phone,
+            address: businessProfile?.address,
+            website: businessProfile?.website,
+          },
+          client: {
+            name: selectedClientObj?.name || 'Client',
+            companyName: selectedClientObj?.companyName,
+            email: selectedClientObj?.email || '',
+            billingAddress: selectedClientObj?.billingAddress,
+          },
+          items: cleanItems,
+          subtotalCents: totals.subtotalCents,
+          discountCents: totals.discountCents,
+          taxCents: totals.taxCents,
+          taxLabel: businessProfile?.taxLabel || 'Sales Tax',
+          totalCents: totals.totalCents,
+          amountPaidCents: totals.amountPaidCents,
+          balanceDueCents: totals.balanceDueCents,
+          paymentInstructions,
+          notes,
+          terms,
+        },
+        `Invoice-${invoiceNumber || 'Draft'}.pdf`
+      );
+      notify('success', 'PDF downloaded', `Invoice-${invoiceNumber || 'Draft'}.pdf saved.`);
     } catch (err: any) {
       notify('error', 'PDF failed', err?.message || 'Could not export PDF.');
     } finally {
@@ -751,10 +817,15 @@ export const InvoicesView: React.FC<{
                               type="button"
                               onClick={() => handleDownloadPdf(inv)}
                               disabled={pdfBusyId === inv.id}
-                              title="Download PDF"
-                              className="p-1.5 text-slate-600 hover:text-[#172B4D] hover:bg-slate-100 rounded cursor-pointer"
+                              title="Download Invoice PDF"
+                              aria-label={`Download PDF for ${inv.invoiceNumber}`}
+                              className="p-1.5 text-slate-600 hover:text-[#172B4D] hover:bg-slate-100 rounded cursor-pointer disabled:opacity-50"
                             >
-                              <Download className="w-3.5 h-3.5" />
+                              {pdfBusyId === inv.id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin text-[#2563EB]" />
+                              ) : (
+                                <Download className="w-3.5 h-3.5" />
+                              )}
                             </button>
                             <button
                               type="button"
@@ -875,7 +946,7 @@ export const InvoicesView: React.FC<{
                       }
                     >
                       <Download className="w-3.5 h-3.5" />
-                      <span>PDF</span>
+                      <span>Download PDF</span>
                     </AnimatedButton>
                     <button
                       type="button"
@@ -1303,23 +1374,34 @@ export const InvoicesView: React.FC<{
                 )}
               </div>
 
-              <div className="flex flex-wrap justify-end gap-2.5 pt-2">
+              <div className="flex flex-wrap justify-between items-center gap-2.5 pt-2">
                 <AnimatedButton
                   type="button"
                   variant="secondary"
-                  loading={saving}
-                  onClick={() => handleSaveInvoice('draft')}
+                  loading={pdfBusyId === (editingInv?.id || 'builder-draft')}
+                  onClick={handleDownloadBuilderPdf}
                 >
-                  Save Draft
+                  <Download className="w-4 h-4" />
+                  <span>Download PDF</span>
                 </AnimatedButton>
-                <AnimatedButton
-                  type="button"
-                  loading={saving}
-                  onClick={() => handleSaveInvoice('sent')}
-                >
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>{editingInv ? 'Save Changes' : 'Issue Invoice'}</span>
-                </AnimatedButton>
+                <div className="flex flex-wrap gap-2.5">
+                  <AnimatedButton
+                    type="button"
+                    variant="secondary"
+                    loading={saving}
+                    onClick={() => handleSaveInvoice('draft')}
+                  >
+                    Save Draft
+                  </AnimatedButton>
+                  <AnimatedButton
+                    type="button"
+                    loading={saving}
+                    onClick={() => handleSaveInvoice('sent')}
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>{editingInv ? 'Save Changes' : 'Issue Invoice'}</span>
+                  </AnimatedButton>
+                </div>
               </div>
             </div>
           </div>
