@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
+import { SponsoredLeaderboardBanner } from '../../components/SponsoredBanner';
 import { useToast } from '../../context/ToastContext';
 import { createClient, updateClient } from '../../lib/firestoreRepo';
 import { AnimatedButton, AnimatedDrawer, AnimatedModal, StatusBadge } from '../../lib/motion';
@@ -302,6 +303,8 @@ export const ClientsView: React.FC<{ openNewTrigger?: number }> = ({ openNewTrig
           </div>
         </div>
       </div>
+
+      <SponsoredLeaderboardBanner />
 
       {/* Table */}
       {filteredClients.length === 0 ? (

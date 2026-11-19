@@ -13,6 +13,7 @@ import {
 import { doc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
+import { SponsoredLeaderboardBanner } from '../../components/SponsoredBanner';
 import { useToast } from '../../context/ToastContext';
 import { downloadPdfFromEndpoint } from '../../lib/api';
 import { db } from '../../lib/firebase';
@@ -335,6 +336,8 @@ export const EstimatesView: React.FC<{
           ))}
         </div>
       </div>
+
+      <SponsoredLeaderboardBanner />
 
       {filtered.length === 0 ? (
         <div className="bg-white border border-slate-200 rounded-xl p-12 text-center">

@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
+import { SponsoredLeaderboardBanner } from '../../components/SponsoredBanner';
 import { useToast } from '../../context/ToastContext';
 import {
   computeNextRunDate,
@@ -284,6 +285,8 @@ export const RecurringView: React.FC<{
           </p>
         </div>
       </div>
+
+      <SponsoredLeaderboardBanner />
 
       {/* Table */}
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">

@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Download, Eye, FileText, FolderOpen, Plus, Search, Trash2, Upload } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
+import { SponsoredLeaderboardBanner } from '../../components/SponsoredBanner';
 import { useToast } from '../../context/ToastContext';
 import { downloadPdfFromEndpoint } from '../../lib/api';
 import { createVaultDocument, deleteVaultDocument } from '../../lib/firestoreRepo';
@@ -261,6 +262,8 @@ export const DocumentsView: React.FC = () => {
           </div>
         )}
       </div>
+
+      <SponsoredLeaderboardBanner />
 
       {/* Quick Archive of Generated Invoice & Estimate PDFs */}
       <div className="grid lg:grid-cols-2 gap-6">

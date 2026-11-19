@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { ArrowLeft, ArrowRight, Building2, Check, SlidersHorizontal, Upload } from 'lucide-react';
 import { BrandLogo } from '../components/BrandLogo';
+import { SponsoredBanner, SponsoredLeaderboardBanner } from '../components/SponsoredBanner';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { saveBusinessProfile, updateUserAccount } from '../lib/firestoreRepo';
@@ -116,12 +117,14 @@ export const OnboardingWizard: React.FC<{ onComplete: () => void }> = ({ onCompl
   };
 
   return (
-    <div className="min-h-screen bg-[#F5F7FA] py-10 px-4 sm:px-6 flex flex-col justify-center">
-      <div className="max-w-2xl w-full mx-auto">
-        <div className="flex items-center justify-between mb-6">
-          <BrandLogo />
-          <span className="text-xs font-medium text-slate-500">Step {step} of 3</span>
-        </div>
+    <div className="min-h-screen bg-[#F5F7FA] flex flex-col">
+      <header className="bg-white border-b border-slate-200 px-4 sm:px-6 h-16 flex items-center justify-between">
+        <BrandLogo />
+        <span className="text-xs font-medium text-slate-500">Step {step} of 3</span>
+      </header>
+      <SponsoredBanner />
+      <div className="flex-1 py-10 px-4 sm:px-6 flex flex-col justify-center">
+        <div className="max-w-2xl w-full mx-auto">
 
         {/* Progress Bar */}
         <div className="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden mb-6">
@@ -132,6 +135,8 @@ export const OnboardingWizard: React.FC<{ onComplete: () => void }> = ({ onCompl
             transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
           />
         </div>
+
+        <SponsoredLeaderboardBanner className="mb-6" />
 
         <form onSubmit={handleFinish} className="bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 shadow-sm">
           <AnimatePresence mode="wait">
@@ -461,6 +466,7 @@ export const OnboardingWizard: React.FC<{ onComplete: () => void }> = ({ onCompl
             )}
           </AnimatePresence>
         </form>
+        </div>
       </div>
     </div>
   );

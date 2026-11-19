@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { CreditCard, Download, ExternalLink, Plus } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
+import { SponsoredLeaderboardBanner } from '../../components/SponsoredBanner';
 import { useToast } from '../../context/ToastContext';
 import { downloadPdfFromEndpoint } from '../../lib/api';
 import { recordInvoicePayment } from '../../lib/firestoreRepo';
@@ -143,6 +144,8 @@ export const PaymentsView: React.FC<{
           <span>Record Payment</span>
         </AnimatedButton>
       </div>
+
+      <SponsoredLeaderboardBanner />
 
       {payments.length === 0 ? (
         <div className="bg-white border border-slate-200 rounded-xl p-12 text-center">

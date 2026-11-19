@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Check, CreditCard, Info, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
+import { SponsoredLeaderboardBanner } from '../../components/SponsoredBanner';
 import { useToast } from '../../context/ToastContext';
 import { apiGet, apiPost } from '../../lib/api';
 import { updateUserAccount } from '../../lib/firestoreRepo';
@@ -129,6 +130,8 @@ export const SubscriptionView: React.FC = () => {
           </p>
         </div>
       </div>
+
+      <SponsoredLeaderboardBanner />
 
       {/* Plan Cards */}
       <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-5">

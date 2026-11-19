@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Download, Plus, Receipt, Search, Sparkles, Trash2, Upload } from 'lucide-react';
 import { BarComparisonChart } from '../../components/Charts';
+import { SponsoredLeaderboardBanner } from '../../components/SponsoredBanner';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
@@ -217,6 +218,8 @@ export const ExpensesView: React.FC<{ openNewTrigger?: number }> = ({ openNewTri
           </AnimatedButton>
         </div>
       </div>
+
+      <SponsoredLeaderboardBanner />
 
       <div className="grid lg:grid-cols-12 gap-6">
         <div className="lg:col-span-8 space-y-4">

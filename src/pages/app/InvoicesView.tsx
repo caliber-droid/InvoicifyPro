@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { InvoicePreview } from '../../components/invoice/InvoicePreview';
 import { InvoiceTemplateSelector, SelectableInvoiceTemplate } from '../../components/invoice/InvoiceTemplateSelector';
+import { SponsoredLeaderboardBanner } from '../../components/SponsoredBanner';
 import { doc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
@@ -725,6 +726,8 @@ export const InvoicesView: React.FC<{
           ))}
         </div>
       </div>
+
+      <SponsoredLeaderboardBanner />
 
       {/* Split-Screen Invoice Table + Animated PDF-Style Preview Side Panel */}
       {filtered.length === 0 ? (

@@ -13,6 +13,7 @@ import {
   UserPlus,
 } from 'lucide-react';
 import { BarComparisonChart, MonthlyTrendPoint, RevenueTrendChart } from '../../components/Charts';
+import { SponsoredLeaderboardBanner } from '../../components/SponsoredBanner';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
 import {
@@ -327,6 +328,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </StaggerItem>
         ))}
       </StaggerGrid>
+
+      <SponsoredLeaderboardBanner />
 
       {/* Main Chart & Invoice Intelligence Score */}
       <div className="grid lg:grid-cols-12 gap-6">

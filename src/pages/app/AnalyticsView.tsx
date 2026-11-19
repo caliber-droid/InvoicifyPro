@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Download, Info, TrendingUp } from 'lucide-react';
 import { BarComparisonChart, ForecastChart, MonthlyTrendPoint, RevenueTrendChart } from '../../components/Charts';
+import { SponsoredLeaderboardBanner } from '../../components/SponsoredBanner';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
@@ -335,6 +336,8 @@ export const AnalyticsView: React.FC = () => {
           <RevenueTrendChart data={sixMonthTrend} height={220} />
         </div>
       </div>
+
+      <SponsoredLeaderboardBanner />
 
       {/* Client & Expense Breakdown */}
       <div className="grid lg:grid-cols-2 gap-6">

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
 import { ArrowLeft, CheckCircle2, Eye, EyeOff, KeyRound, Mail, RefreshCw } from 'lucide-react';
 import { BrandLogo } from '../components/BrandLogo';
+import { SponsoredBanner, SponsoredLeaderboardBanner } from '../components/SponsoredBanner';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { AnimatedButton } from '../lib/motion';
@@ -38,16 +39,25 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode, onBackToSite })
   // Email verification gate when signed in with unverified email/password account
   if (firebaseUser && !firebaseUser.emailVerified) {
     return (
-      <div className="min-h-screen bg-[#F5F7FA] flex items-center justify-center p-6">
-        <motion.div
-          initial={reduced ? false : { opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="max-w-md w-full bg-white border border-slate-200 rounded-2xl p-8 shadow-sm"
-        >
-          <div className="mb-6">
-            <BrandLogo />
-          </div>
-          <div className="w-11 h-11 rounded-xl bg-blue-50 text-[#2563EB] flex items-center justify-center mb-4">
+      <div className="min-h-screen bg-[#F5F7FA] flex flex-col">
+        <header className="bg-white border-b border-slate-200 px-4 sm:px-6 h-16 flex items-center justify-between">
+          <BrandLogo />
+          <button
+            type="button"
+            onClick={logout}
+            className="text-xs font-medium text-slate-600 hover:text-[#172033] cursor-pointer"
+          >
+            Sign out
+          </button>
+        </header>
+        <SponsoredBanner />
+        <div className="flex-1 flex items-center justify-center p-6">
+          <motion.div
+            initial={reduced ? false : { opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="max-w-md w-full bg-white border border-slate-200 rounded-2xl p-8 shadow-sm"
+          >
+            <div className="w-11 h-11 rounded-xl bg-blue-50 text-[#2563EB] flex items-center justify-center mb-4">
             <Mail className="w-5 h-5" />
           </div>
           <h1 className="font-display text-2xl font-bold text-[#172B4D] mb-2">Verify your email address</h1>
@@ -88,8 +98,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode, onBackToSite })
             >
               Sign out and use another account
             </button>
-          </div>
-        </motion.div>
+            </div>
+          </motion.div>
+          <SponsoredLeaderboardBanner className="mt-6" />
+        </div>
       </div>
     );
   }
@@ -155,23 +167,27 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode, onBackToSite })
   };
 
   return (
-    <div className="min-h-screen bg-[#F5F7FA] flex flex-col justify-center py-12 px-4 sm:px-6">
-      <div className="max-w-md w-full mx-auto">
+    <div className="min-h-screen bg-[#F5F7FA] flex flex-col">
+      <header className="bg-white border-b border-slate-200 px-4 sm:px-6 h-16 flex items-center justify-between">
+        <BrandLogo />
         <button
           type="button"
           onClick={onBackToSite}
-          className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600 hover:text-[#172B4D] mb-6 cursor-pointer"
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600 hover:text-[#172B4D] cursor-pointer"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
           <span>Back to InvoicifyPro</span>
         </button>
-
-        <motion.div
-          initial={reduced ? false : { opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.25 }}
-          className="bg-white border border-slate-200 rounded-2xl p-8 shadow-sm"
-        >
+      </header>
+      <SponsoredBanner />
+      <div className="flex-1 flex flex-col justify-center py-12 px-4 sm:px-6">
+        <div className="max-w-md w-full mx-auto">
+          <motion.div
+            initial={reduced ? false : { opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.25 }}
+            className="bg-white border border-slate-200 rounded-2xl p-8 shadow-sm"
+          >
           <div className="mb-6">
             <BrandLogo />
             <h1 className="font-display text-2xl font-bold text-[#172B4D] mt-5">
@@ -348,7 +364,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode, onBackToSite })
               </span>
             )}
           </div>
-        </motion.div>
+          </motion.div>
+        </div>
+        <SponsoredLeaderboardBanner className="mt-6" />
       </div>
     </div>
   );

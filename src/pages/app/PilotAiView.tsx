@@ -11,6 +11,7 @@ import {
 import { doc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
+import { SponsoredLeaderboardBanner } from '../../components/SponsoredBanner';
 import { useToast } from '../../context/ToastContext';
 import { apiPost } from '../../lib/api';
 import { db } from '../../lib/firebase';
@@ -368,6 +369,8 @@ export const PilotAiView: React.FC<{
           )}
         </div>
       )}
+
+      <SponsoredLeaderboardBanner />
 
       <div className="grid lg:grid-cols-12 gap-5">
         {/* Saved Conversations */}

@@ -10,6 +10,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { BrandLogo } from '../components/BrandLogo';
+import { SponsoredBanner, SponsoredLeaderboardBanner } from '../components/SponsoredBanner';
 import { apiGet, apiPost, downloadPdfFromEndpoint } from '../lib/api';
 import { fetchPortalShare, submitEstimatePortalDecision } from '../lib/firestoreRepo';
 import { AnimatedButton, StatusBadge } from '../lib/motion';
@@ -181,24 +182,26 @@ export const PublicPortalPage: React.FC<{ shareToken: string; onExitPortal: () =
   }
 
   return (
-    <div className="min-h-screen bg-[#F5F7FA] py-8 px-4 sm:px-6">
-      <div className="max-w-3xl mx-auto">
-        <div className="flex items-center justify-between gap-4 mb-6">
-          <BrandLogo />
-          <div className="flex items-center gap-3">
-            <span className="inline-flex items-center gap-1.5 text-xs text-slate-500">
-              <Lock className="w-3.5 h-3.5 text-[#16A34A]" />
-              <span>Secure Client Portal</span>
-            </span>
-            <button
-              type="button"
-              onClick={onExitPortal}
-              className="text-xs font-medium text-[#2563EB] hover:underline cursor-pointer"
-            >
-              Sign in to Workspace
-            </button>
-          </div>
+    <div className="min-h-screen bg-[#F5F7FA] flex flex-col">
+      <header className="bg-white border-b border-slate-200 px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
+        <BrandLogo />
+        <div className="flex items-center gap-3">
+          <span className="inline-flex items-center gap-1.5 text-xs text-slate-500">
+            <Lock className="w-3.5 h-3.5 text-[#16A34A]" />
+            <span>Secure Client Portal</span>
+          </span>
+          <button
+            type="button"
+            onClick={onExitPortal}
+            className="text-xs font-medium text-[#2563EB] hover:underline cursor-pointer"
+          >
+            Sign in to Workspace
+          </button>
         </div>
+      </header>
+      <SponsoredBanner />
+      <div className="flex-1 py-8 px-4 sm:px-6">
+        <div className="max-w-3xl mx-auto">
 
         <motion.div
           initial={reduced ? false : { opacity: 0, y: 10 }}
@@ -431,6 +434,8 @@ export const PublicPortalPage: React.FC<{ shareToken: string; onExitPortal: () =
             )}
           </div>
         </motion.div>
+        </div>
+        <SponsoredLeaderboardBanner className="mt-6" />
       </div>
     </div>
   );

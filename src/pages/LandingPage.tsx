@@ -17,6 +17,7 @@ import {
   Users,
 } from 'lucide-react';
 import { BrandLogo } from '../components/BrandLogo';
+import { SponsoredBanner, SponsoredLeaderboardBanner } from '../components/SponsoredBanner';
 import { InvoicePreview } from '../components/invoice/InvoicePreview';
 import {
   InvoiceTemplateSelector,
@@ -222,6 +223,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           </div>
         </div>
       </header>
+
+      <SponsoredBanner />
 
       {/* Hero Section */}
       <section id="top" className="relative overflow-hidden bg-white border-b border-slate-200">
@@ -742,6 +745,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           </div>
         </div>
       </section>
+
+      <div className="bg-[#F5F7FA] border-b border-slate-200 py-4">
+        <SponsoredLeaderboardBanner />
+      </div>
 
       {/* Pricing */}
       <section id="pricing" className="max-w-[1200px] mx-auto px-6 py-20">

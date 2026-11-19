@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { collection, doc, getDocs, limit, orderBy, query, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { Activity, Shield, Users } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { SponsoredLeaderboardBanner } from '../../components/SponsoredBanner';
 import { useToast } from '../../context/ToastContext';
 import { apiGet } from '../../lib/api';
 import { db } from '../../lib/firebase';
@@ -153,6 +154,8 @@ export const AdminView: React.FC = () => {
           </span>
         </div>
       )}
+
+      <SponsoredLeaderboardBanner />
 
       {/* Users Table */}
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">

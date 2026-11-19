@@ -3,6 +3,7 @@ import { deleteUser } from 'firebase/auth';
 import { Download, Save, ShieldAlert, Trash2, Upload } from 'lucide-react';
 import { InvoicePreview } from '../../components/invoice/InvoicePreview';
 import { InvoiceTemplateSelector, SelectableInvoiceTemplate } from '../../components/invoice/InvoiceTemplateSelector';
+import { SponsoredLeaderboardBanner } from '../../components/SponsoredBanner';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import {
@@ -454,6 +455,8 @@ export const SettingsView: React.FC = () => {
             </div>
           </div>
         </div>
+
+        <SponsoredLeaderboardBanner />
 
         {/* Invoice Template & PDF Watermark Defaults */}
         <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-5">

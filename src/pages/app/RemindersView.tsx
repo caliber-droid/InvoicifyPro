@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { BellRing, Calendar, CheckCircle2, Mail, Sparkles } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
+import { SponsoredLeaderboardBanner } from '../../components/SponsoredBanner';
 import { useToast } from '../../context/ToastContext';
 import { apiPost } from '../../lib/api';
 import { createReminder, updateReminder } from '../../lib/firestoreRepo';
@@ -203,6 +204,8 @@ export const RemindersView: React.FC = () => {
           </div>
         )}
       </div>
+
+      <SponsoredLeaderboardBanner />
 
       {/* Reminder History */}
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
