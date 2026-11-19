@@ -101,7 +101,21 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode, onBackToSite })
       await signInWithGoogle();
       notify('success', 'Signed in', 'Welcome to InvoicifyPro.');
     } catch (err: any) {
-      setErrorMsg(err?.message || 'Google sign-in could not be completed.');
+      const code = err?.code || '';
+      if (code === 'auth/unauthorized-domain') {
+        const host = typeof window !== 'undefined' ? window.location.hostname : 'this domain';
+        setErrorMsg(
+          `The domain "${host}" is not authorized for Firebase Google Sign-In yet. Add "${host}" in Firebase Console -> Authentication -> Settings -> Authorized domains.`
+        );
+      } else if (code === 'auth/popup-blocked') {
+        setErrorMsg(
+          'Your browser blocked the Google Sign-In popup. Please allow popups for this site and try again.'
+        );
+      } else if (code === 'auth/popup-closed-by-user') {
+        setErrorMsg('Google sign-in was cancelled before completion.');
+      } else {
+        setErrorMsg(err?.message || 'Google sign-in could not be completed.');
+      }
     } finally {
       setGoogleSubmitting(false);
     }
