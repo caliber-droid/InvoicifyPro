@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { BrandLogo } from './components/BrandLogo';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { FooterSponsoredBanner, SponsoredBanner } from './components/SponsoredBanner';
+import { SponsoredBanner } from './components/SponsoredBanner';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { DataProvider, useData } from './context/DataContext';
 import { ToastProvider } from './context/ToastContext';
@@ -414,8 +414,6 @@ const WorkspaceShell: React.FC<{ onOpenPortalToken: (token: string) => void }> =
             <PageTransition routeKey={activeTab}>{renderView()}</PageTransition>
           </AnimatePresence>
         </main>
-
-        <FooterSponsoredBanner />
 
         <footer className="bg-white border-t border-slate-200 px-4 sm:px-6 py-4 text-xs text-slate-500 flex flex-col sm:flex-row items-center justify-between gap-2">
           <span>&copy; {new Date().getFullYear()} InvoicifyPro &middot; USD Billing &amp; Cash Flow Platform</span>
