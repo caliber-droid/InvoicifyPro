@@ -14,6 +14,7 @@ import { apiGet, apiPost, downloadPdfFromEndpoint } from '../lib/api';
 import { fetchPortalShare, submitEstimatePortalDecision } from '../lib/firestoreRepo';
 import { AnimatedButton, StatusBadge } from '../lib/motion';
 import { formatUsd } from '../lib/money';
+import { resolveWatermarkDisplay } from '../lib/watermark';
 import { PortalShare } from '../types/models';
 
 export const PublicPortalPage: React.FC<{ shareToken: string; onExitPortal: () => void }> = ({
@@ -60,6 +61,8 @@ export const PublicPortalPage: React.FC<{ shareToken: string; onExitPortal: () =
     if (!share) return;
     setDownloading(true);
     try {
+      const resolvedWm =
+        share.kind === 'invoice' ? resolveWatermarkDisplay(share.watermarkConfig, share.status) : null;
       await downloadPdfFromEndpoint(
         '/api/pdf/document',
         {
@@ -69,6 +72,14 @@ export const PublicPortalPage: React.FC<{ shareToken: string; onExitPortal: () =
           issueDate: share.issueDate,
           dueDate: share.dueDate,
           status: share.status,
+          watermark: resolvedWm
+            ? {
+                text: resolvedWm.text,
+                opacityPct: resolvedWm.opacityPct,
+                angle: resolvedWm.angle,
+                color: resolvedWm.color,
+              }
+            : null,
           business: {
             businessName: share.businessName,
             businessEmail: share.businessEmail || '',
@@ -192,22 +203,81 @@ export const PublicPortalPage: React.FC<{ shareToken: string; onExitPortal: () =
         <motion.div
           initial={reduced ? false : { opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden"
+          className="relative bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden"
         >
-          <div className="bg-[#172B4D] text-white px-6 sm:px-8 py-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          {(() => {
+            const wm =
+              share.kind === 'invoice'
+                ? resolveWatermarkDisplay(share.watermarkConfig, share.status)
+                : null;
+            if (!wm) return null;
+            return (
+              <div
+                aria-hidden="true"
+                className="pointer-events-none select-none absolute inset-0 z-20 flex items-center justify-center overflow-hidden"
+              >
+                <span
+                  style={{
+                    color: wm.color,
+                    opacity: wm.opacity,
+                    transform: `rotate(${wm.angle}deg)`,
+                  }}
+                  className="font-display font-extrabold text-5xl sm:text-7xl tracking-[0.14em] uppercase whitespace-nowrap"
+                >
+                  {wm.text}
+                </span>
+              </div>
+            );
+          })()}
+          {share.template === 'modern' && <div className="h-2 bg-[#0284C7]" />}
+          <div
+            className={`px-6 sm:px-8 py-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+              share.template === 'minimal'
+                ? 'bg-white text-[#172033] border-b border-slate-200'
+                : share.template === 'creative'
+                  ? 'bg-[#EFF6FF] text-[#172B4D] border-b border-blue-100'
+                  : share.template === 'modern'
+                    ? 'bg-[#0F172A] text-white'
+                    : 'bg-[#172B4D] text-white'
+            }`}
+          >
             <div>
-              <p className="text-xs text-slate-300 uppercase tracking-wider font-semibold">
+              <p
+                className={`text-xs uppercase tracking-wider font-semibold ${
+                  share.template === 'minimal'
+                    ? 'text-slate-500'
+                    : share.template === 'creative'
+                      ? 'text-[#2563EB]'
+                      : 'text-slate-300'
+                }`}
+              >
                 {share.kind === 'estimate' ? 'Estimate' : 'Invoice'} #{share.docNumber}
               </p>
               <h1 className="font-display text-2xl font-bold mt-1">{share.businessName}</h1>
-              {share.businessEmail && <p className="text-xs text-slate-300 mt-0.5">{share.businessEmail}</p>}
+              {share.businessEmail && (
+                <p
+                  className={`text-xs mt-0.5 ${
+                    share.template === 'minimal' || share.template === 'creative'
+                      ? 'text-slate-600'
+                      : 'text-slate-300'
+                  }`}
+                >
+                  {share.businessEmail}
+                </p>
+              )}
             </div>
             <div className="flex flex-col sm:items-end gap-2">
               <StatusBadge status={share.status} />
               <p className="font-mono text-2xl font-bold tabular-nums">
                 {formatUsd(share.kind === 'estimate' ? share.totalCents : share.balanceDueCents)}
               </p>
-              <p className="text-xs text-slate-300">
+              <p
+                className={`text-xs ${
+                  share.template === 'minimal' || share.template === 'creative'
+                    ? 'text-slate-500'
+                    : 'text-slate-300'
+                }`}
+              >
                 {share.kind === 'estimate' ? `Expires ${share.dueDate}` : `Due ${share.dueDate}`}
               </p>
             </div>

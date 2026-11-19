@@ -6,6 +6,7 @@ import { useToast } from '../../context/ToastContext';
 import { downloadPdfFromEndpoint } from '../../lib/api';
 import { createVaultDocument, deleteVaultDocument } from '../../lib/firestoreRepo';
 import { AnimatedButton, AnimatedModal } from '../../lib/motion';
+import { resolveWatermarkDisplay } from '../../lib/watermark';
 import { VaultDocument } from '../../types/models';
 
 export const DocumentsView: React.FC = () => {
@@ -100,6 +101,13 @@ export const DocumentsView: React.FC = () => {
   const handleDownloadGeneratedPdf = async (kind: 'invoice' | 'estimate', docItem: any) => {
     setPdfBusyId(docItem.id);
     try {
+      const resolvedWm =
+        kind === 'invoice'
+          ? resolveWatermarkDisplay(
+              docItem.watermarkConfig ?? businessProfile?.watermarkConfig,
+              docItem.status
+            )
+          : null;
       await downloadPdfFromEndpoint(
         '/api/pdf/document',
         {
@@ -109,6 +117,14 @@ export const DocumentsView: React.FC = () => {
           issueDate: docItem.issueDate,
           dueDate: kind === 'invoice' ? docItem.dueDate : docItem.expirationDate,
           status: docItem.status,
+          watermark: resolvedWm
+            ? {
+                text: resolvedWm.text,
+                opacityPct: resolvedWm.opacityPct,
+                angle: resolvedWm.angle,
+                color: resolvedWm.color,
+              }
+            : null,
           business: {
             businessName: businessProfile?.businessName || 'InvoicifyPro Business',
             businessEmail: businessProfile?.businessEmail || '',

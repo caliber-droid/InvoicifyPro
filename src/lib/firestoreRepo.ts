@@ -24,14 +24,17 @@ import {
   Estimate,
   Expense,
   Invoice,
+  InvoiceTemplate,
   Payment,
   PortalShare,
   RecurringProfile,
   Reminder,
   UserAccount,
   VaultDocument,
+  WatermarkConfig,
 } from '../types/models';
 import { addDaysIso, generateRandomId, todayIso } from './money';
+import { DEFAULT_WATERMARK_CONFIG, sanitizeWatermarkConfig } from './watermark';
 
 export function subscribeOwnerCollection<T extends { id: string }>(
   collectionName: string,
@@ -159,10 +162,14 @@ export async function saveBusinessProfile(
   isNew: boolean
 ) {
   const ref = doc(db, 'businessProfiles', uid);
+  const sanitizedWatermark = sanitizeWatermarkConfig(profile.watermarkConfig ?? DEFAULT_WATERMARK_CONFIG);
+  const defaultTemplate: InvoiceTemplate = profile.defaultTemplate || 'corporate';
   try {
     if (isNew) {
       await setDoc(ref, {
         ...profile,
+        defaultTemplate,
+        watermarkConfig: sanitizedWatermark,
         ownerId: uid,
         defaultCurrency: 'USD',
         createdAt: serverTimestamp(),
@@ -188,6 +195,8 @@ export async function saveBusinessProfile(
         preferredPaymentMethods: profile.preferredPaymentMethods || ['ACH Bank Transfer', 'Credit Card'],
         timezone: profile.timezone || 'America/New_York',
         defaultDueDays: profile.defaultDueDays,
+        defaultTemplate,
+        watermarkConfig: sanitizedWatermark,
         reminderSchedule: profile.reminderSchedule || {
           beforeDue3Days: true,
           onDueDate: true,
@@ -261,9 +270,13 @@ export async function createInvoice(
 ) {
   const id = generateRandomId('inv');
   const shareToken = data.publicShareToken || generateRandomId('shr_inv');
+  const sanitizedWatermark = data.watermarkConfig
+    ? sanitizeWatermarkConfig(data.watermarkConfig)
+    : undefined;
   try {
     await setDoc(doc(db, 'invoices', id), {
       ...data,
+      ...(sanitizedWatermark ? { watermarkConfig: sanitizedWatermark } : {}),
       ownerId,
       publicShareToken: shareToken,
       createdAt: serverTimestamp(),
@@ -282,6 +295,7 @@ export async function createInvoice(
       issueDate: data.issueDate,
       dueDate: data.dueDate,
       template: data.template,
+      ...(sanitizedWatermark ? { watermarkConfig: sanitizedWatermark } : {}),
       items: data.items.slice(0, 50),
       subtotalCents: data.subtotalCents,
       discountCents: data.discountCents,
@@ -319,27 +333,34 @@ export async function updateInvoice(
   patch: Partial<Invoice>,
   syncPortal = true
 ) {
+  const cleanPatch: Partial<Invoice> = { ...patch };
+  if (patch.watermarkConfig) {
+    cleanPatch.watermarkConfig = sanitizeWatermarkConfig(patch.watermarkConfig);
+  }
   try {
     await updateDoc(doc(db, 'invoices', invoice.id), {
-      ...patch,
+      ...cleanPatch,
       updatedAt: serverTimestamp(),
     });
     if (syncPortal && invoice.publicShareToken) {
       const portalRef = doc(db, 'portalShares', invoice.publicShareToken);
       const portalSnap = await getDoc(portalRef).catch(() => null);
       if (portalSnap?.exists()) {
+        const syncedWatermark = cleanPatch.watermarkConfig ?? invoice.watermarkConfig;
         await updateDoc(portalRef, {
-          status: patch.status ?? invoice.status,
-          amountPaidCents: patch.amountPaidCents ?? invoice.amountPaidCents,
-          balanceDueCents: patch.balanceDueCents ?? invoice.balanceDueCents,
-          items: (patch.items ?? invoice.items).slice(0, 50),
-          subtotalCents: patch.subtotalCents ?? invoice.subtotalCents,
-          discountCents: patch.discountCents ?? invoice.discountCents,
-          taxCents: patch.taxCents ?? invoice.taxCents,
-          totalCents: patch.totalCents ?? invoice.totalCents,
-          dueDate: patch.dueDate ?? invoice.dueDate,
-          notes: (patch.notes ?? invoice.notes ?? '').slice(0, 2000),
-          terms: (patch.terms ?? invoice.terms ?? '').slice(0, 2000),
+          status: cleanPatch.status ?? invoice.status,
+          template: cleanPatch.template ?? invoice.template,
+          ...(syncedWatermark ? { watermarkConfig: sanitizeWatermarkConfig(syncedWatermark) } : {}),
+          amountPaidCents: cleanPatch.amountPaidCents ?? invoice.amountPaidCents,
+          balanceDueCents: cleanPatch.balanceDueCents ?? invoice.balanceDueCents,
+          items: (cleanPatch.items ?? invoice.items).slice(0, 50),
+          subtotalCents: cleanPatch.subtotalCents ?? invoice.subtotalCents,
+          discountCents: cleanPatch.discountCents ?? invoice.discountCents,
+          taxCents: cleanPatch.taxCents ?? invoice.taxCents,
+          totalCents: cleanPatch.totalCents ?? invoice.totalCents,
+          dueDate: cleanPatch.dueDate ?? invoice.dueDate,
+          notes: (cleanPatch.notes ?? invoice.notes ?? '').slice(0, 2000),
+          terms: (cleanPatch.terms ?? invoice.terms ?? '').slice(0, 2000),
           updatedAt: serverTimestamp(),
         });
       }
@@ -746,7 +767,9 @@ export async function runRecurringScheduleOnce(
   nextInvoiceNumber: number,
   invoiceFormat: string,
   businessName: string,
-  businessEmail: string
+  businessEmail: string,
+  defaultTemplate: InvoiceTemplate = 'corporate',
+  watermarkConfig?: WatermarkConfig
 ) {
   const today = todayIso();
   // Idempotency guard: do not re-run if already executed today
@@ -769,7 +792,8 @@ export async function runRecurringScheduleOnce(
       issueDate: today,
       dueDate,
       status: profile.autoNotify ? 'sent' : 'draft',
-      template: 'corporate',
+      template: defaultTemplate,
+      ...(watermarkConfig ? { watermarkConfig: sanitizeWatermarkConfig(watermarkConfig) } : {}),
       items: profile.items,
       subtotalCents,
       discountCents: 0,

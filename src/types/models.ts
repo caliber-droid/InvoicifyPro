@@ -34,6 +34,16 @@ export type PaymentMethod =
   | 'other';
 export type ReminderTone = 'friendly' | 'professional' | 'polite' | 'firm' | 'final_notice';
 export type RecurringFrequency = 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'annual' | 'custom';
+export type WatermarkMode = 'status' | 'custom';
+
+export interface WatermarkConfig {
+  enabled: boolean;
+  mode: WatermarkMode;
+  customText: string;
+  opacityPct: number;
+  angle: number;
+  color: string;
+}
 
 export interface LineItem {
   id: string;
@@ -76,6 +86,8 @@ export interface BusinessProfile {
   preferredPaymentMethods?: string[];
   timezone?: string;
   defaultDueDays: number;
+  defaultTemplate?: InvoiceTemplate;
+  watermarkConfig?: WatermarkConfig;
   reminderSchedule?: {
     beforeDue3Days: boolean;
     onDueDate: boolean;
@@ -120,6 +132,7 @@ export interface Invoice {
   dueDate: string;
   status: InvoiceStatus;
   template: InvoiceTemplate;
+  watermarkConfig?: WatermarkConfig;
   items: LineItem[];
   subtotalCents: number;
   discountCents: number;
@@ -307,6 +320,7 @@ export interface PortalShare {
   issueDate: string;
   dueDate: string;
   template?: string;
+  watermarkConfig?: WatermarkConfig;
   items: LineItem[];
   subtotalCents: number;
   discountCents: number;

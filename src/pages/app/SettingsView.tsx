@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { deleteUser } from 'firebase/auth';
 import { Download, Save, ShieldAlert, Trash2, Upload } from 'lucide-react';
+import { InvoicePreview } from '../../components/invoice/InvoicePreview';
+import { InvoiceTemplateSelector, SelectableInvoiceTemplate } from '../../components/invoice/InvoiceTemplateSelector';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import {
@@ -10,7 +12,8 @@ import {
   updateUserAccount,
 } from '../../lib/firestoreRepo';
 import { AnimatedButton, AnimatedModal } from '../../lib/motion';
-import { BUSINESS_TYPES } from '../../types/models';
+import { DEFAULT_WATERMARK_CONFIG, sanitizeWatermarkConfig } from '../../lib/watermark';
+import { BUSINESS_TYPES, InvoiceTemplate, WatermarkConfig } from '../../types/models';
 
 export const SettingsView: React.FC = () => {
   const { firebaseUser, userAccount, businessProfile, logout } = useAuth();
@@ -34,6 +37,9 @@ export const SettingsView: React.FC = () => {
   const [defaultDueDays, setDefaultDueDays] = useState('15');
   const [timezone, setTimezone] = useState('America/New_York');
   const [paymentMethods, setPaymentMethods] = useState<string[]>(['ACH Bank Transfer', 'Credit Card']);
+  const [defaultTemplate, setDefaultTemplate] = useState<InvoiceTemplate>('corporate');
+  const [watermarkConfig, setWatermarkConfig] = useState<WatermarkConfig>(DEFAULT_WATERMARK_CONFIG);
+  const [samplePreviewStatus, setSamplePreviewStatus] = useState<'draft' | 'sent' | 'paid' | 'overdue'>('draft');
 
   const [remBefore3, setRemBefore3] = useState(true);
   const [remOnDue, setRemOnDue] = useState(true);
@@ -72,6 +78,12 @@ export const SettingsView: React.FC = () => {
     setDefaultDueDays(String(businessProfile.defaultDueDays ?? 15));
     setTimezone(businessProfile.timezone || 'America/New_York');
     setPaymentMethods(businessProfile.preferredPaymentMethods || ['ACH Bank Transfer', 'Credit Card']);
+    setDefaultTemplate(businessProfile.defaultTemplate || 'corporate');
+    setWatermarkConfig(
+      businessProfile.watermarkConfig
+        ? sanitizeWatermarkConfig(businessProfile.watermarkConfig)
+        : DEFAULT_WATERMARK_CONFIG
+    );
 
     const rs = businessProfile.reminderSchedule;
     if (rs) {
@@ -146,6 +158,8 @@ export const SettingsView: React.FC = () => {
           preferredPaymentMethods: paymentMethods.length > 0 ? paymentMethods : ['ACH Bank Transfer'],
           timezone,
           defaultDueDays: dueDays,
+          defaultTemplate,
+          watermarkConfig: sanitizeWatermarkConfig(watermarkConfig),
           reminderSchedule: {
             beforeDue3Days: remBefore3,
             onDueDate: remOnDue,
@@ -437,6 +451,95 @@ export const SettingsView: React.FC = () => {
                   {m}
                 </button>
               ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Invoice Template & PDF Watermark Defaults */}
+        <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="font-display text-base font-semibold text-[#172033]">
+                Invoice Template &amp; PDF Watermark Settings
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Choose your default invoice layout and automatically or manually stamp PDFs (e.g., Draft, Paid, Overdue).
+              </p>
+            </div>
+            <div className="inline-flex items-center gap-1 p-1 bg-slate-100 rounded-lg self-start">
+              <span className="text-[10px] font-medium text-slate-500 px-1.5">Preview status:</span>
+              {(['draft', 'sent', 'paid', 'overdue'] as const).map((st) => (
+                <button
+                  key={st}
+                  type="button"
+                  onClick={() => setSamplePreviewStatus(st)}
+                  className={`px-2 py-0.5 text-[11px] font-medium rounded capitalize cursor-pointer ${
+                    samplePreviewStatus === st ? 'bg-white text-[#172033] shadow-xs' : 'text-slate-600'
+                  }`}
+                >
+                  {st}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid lg:grid-cols-12 gap-6 items-start">
+            <div className="lg:col-span-7">
+              <InvoiceTemplateSelector
+                value={defaultTemplate}
+                onChange={(tpl: SelectableInvoiceTemplate) => setDefaultTemplate(tpl)}
+                watermark={watermarkConfig}
+                onWatermarkChange={(next) => setWatermarkConfig(next)}
+                invoiceStatus={samplePreviewStatus}
+                watermarkExpandedByDefault
+                label="Default Invoice Template"
+                instanceId="settings-default"
+              />
+            </div>
+
+            <div className="lg:col-span-5 bg-slate-100/80 border border-slate-200 rounded-xl p-3">
+              <InvoicePreview
+                template={defaultTemplate}
+                watermark={watermarkConfig}
+                businessName={businessName || 'Your Business LLC'}
+                businessEmail={businessEmail || 'billing@yourbusiness.com'}
+                businessAddress={address || '100 Main St, Austin, TX 78701'}
+                businessPhone={phone}
+                invoiceNumber={`${invoiceNumberFormat || 'INV-'}${nextInvoiceNumber || '1001'}`}
+                issueDate="2026-11-01"
+                dueDate="2026-11-16"
+                status={samplePreviewStatus}
+                clientName="Acme Retail Partners"
+                clientEmail="ap@acmeretail.example"
+                items={[
+                  {
+                    id: 'sample-1',
+                    description: 'Strategy & Design Retainer',
+                    quantity: 1,
+                    unitPriceCents: 185000,
+                    totalCents: 185000,
+                  },
+                ]}
+                subtotalCents={185000}
+                discountCents={0}
+                taxRateLabel={`${taxLabel || 'Sales Tax'} (${defaultTaxRatePct || 0}%)`}
+                taxCents={Math.round((185000 * (Number.parseFloat(defaultTaxRatePct) || 0)) / 100)}
+                totalCents={
+                  185000 + Math.round((185000 * (Number.parseFloat(defaultTaxRatePct) || 0)) / 100)
+                }
+                amountPaidCents={
+                  samplePreviewStatus === 'paid'
+                    ? 185000 + Math.round((185000 * (Number.parseFloat(defaultTaxRatePct) || 0)) / 100)
+                    : 0
+                }
+                balanceDueCents={
+                  samplePreviewStatus === 'paid'
+                    ? 0
+                    : 185000 + Math.round((185000 * (Number.parseFloat(defaultTaxRatePct) || 0)) / 100)
+                }
+                paymentInstructions="ACH Bank Transfer or online invoice portal."
+                notes="Thank you for your business."
+              />
             </div>
           </div>
         </div>

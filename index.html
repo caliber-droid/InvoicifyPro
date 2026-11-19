@@ -3,6 +3,18 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      window.addEventListener(
+        'error',
+        function (event) {
+          if (event && typeof event.filename === 'string' && event.filename.indexOf('chrome-extension://') === 0) {
+            event.stopImmediatePropagation();
+            event.preventDefault();
+          }
+        },
+        true
+      );
+    </script>
     <title>InvoicifyPro – AI Invoicing, Billing &amp; Cash Flow Platform</title>
     <meta
       name="description"

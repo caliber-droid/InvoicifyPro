@@ -1,11 +1,12 @@
 import React, { useMemo, useState } from 'react';
-import { motion, useReducedMotion } from 'motion/react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import {
   CheckCircle2,
   Copy,
   CreditCard,
   Download,
   ExternalLink,
+  Eye,
   FilePlus2,
   Mail,
   Mic,
@@ -15,8 +16,11 @@ import {
   ShieldCheck,
   Sparkles,
   Trash2,
+  X,
   XCircle,
 } from 'lucide-react';
+import { InvoicePreview } from '../../components/invoice/InvoicePreview';
+import { InvoiceTemplateSelector, SelectableInvoiceTemplate } from '../../components/invoice/InvoiceTemplateSelector';
 import { doc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
@@ -41,16 +45,12 @@ import {
   parseDollarsToCents,
   todayIso,
 } from '../../lib/money';
-import { Invoice, InvoiceTemplate, LineItem, PaymentMethod } from '../../types/models';
-
-const TEMPLATES: Array<{ id: InvoiceTemplate; label: string; headerBg: string; accent: string }> = [
-  { id: 'corporate', label: 'Corporate', headerBg: '#172B4D', accent: '#2563EB' },
-  { id: 'minimal', label: 'Minimal', headerBg: '#172033', accent: '#475569' },
-  { id: 'modern', label: 'Modern', headerBg: '#0F172A', accent: '#0284C7' },
-  { id: 'creative', label: 'Creative', headerBg: '#1E293B', accent: '#2563EB' },
-  { id: 'elegant', label: 'Elegant', headerBg: '#172B4D', accent: '#1E3A8A' },
-  { id: 'professional', label: 'Professional Services', headerBg: '#172B4D', accent: '#16A34A' },
-];
+import {
+  DEFAULT_WATERMARK_CONFIG,
+  resolveWatermarkDisplay,
+  sanitizeWatermarkConfig,
+} from '../../lib/watermark';
+import { Invoice, InvoiceTemplate, LineItem, PaymentMethod, WatermarkConfig } from '../../types/models';
 
 export const InvoicesView: React.FC<{
   openNewTrigger?: number;
@@ -86,6 +86,7 @@ export const InvoicesView: React.FC<{
   const [issueDate, setIssueDate] = useState(todayIso());
   const [dueDate, setDueDate] = useState(addDaysIso(todayIso(), 15));
   const [template, setTemplate] = useState<InvoiceTemplate>('corporate');
+  const [watermarkConfig, setWatermarkConfig] = useState<WatermarkConfig>(DEFAULT_WATERMARK_CONFIG);
   const [items, setItems] = useState<LineItem[]>([]);
   const [discountDollars, setDiscountDollars] = useState('0.00');
   const [taxPct, setTaxPct] = useState('0');
@@ -106,6 +107,11 @@ export const InvoicesView: React.FC<{
   // Email delivery modal
   const [sendModalInv, setSendModalInv] = useState<Invoice | null>(null);
   const [emailSending, setEmailSending] = useState(false);
+
+  // Split-screen Invoice PDF Side Panel
+  const [selectedPreviewId, setSelectedPreviewId] = useState<string | null>(null);
+  const [previewTemplateOverride, setPreviewTemplateOverride] = useState<Record<string, InvoiceTemplate>>({});
+  const [previewWatermarkOverride, setPreviewWatermarkOverride] = useState<Record<string, WatermarkConfig>>({});
 
   React.useEffect(() => {
     if (openNewTrigger && openNewTrigger > 0) {
@@ -131,6 +137,13 @@ export const InvoicesView: React.FC<{
       setIssueDate(inv.issueDate);
       setDueDate(inv.dueDate);
       setTemplate(inv.template);
+      setWatermarkConfig(
+        inv.watermarkConfig
+          ? sanitizeWatermarkConfig(inv.watermarkConfig)
+          : businessProfile?.watermarkConfig
+            ? sanitizeWatermarkConfig(businessProfile.watermarkConfig)
+            : DEFAULT_WATERMARK_CONFIG
+      );
       setItems(inv.items);
       setDiscountDollars(centsToDollarsInput(inv.discountCents));
       setTaxPct((inv.taxRateBps / 100).toString());
@@ -147,7 +160,12 @@ export const InvoicesView: React.FC<{
       const today = todayIso();
       setIssueDate(today);
       setDueDate(addDaysIso(today, businessProfile?.defaultDueDays ?? 15));
-      setTemplate('corporate');
+      setTemplate(businessProfile?.defaultTemplate || 'corporate');
+      setWatermarkConfig(
+        businessProfile?.watermarkConfig
+          ? sanitizeWatermarkConfig(businessProfile.watermarkConfig)
+          : DEFAULT_WATERMARK_CONFIG
+      );
       setItems([
         {
           id: generateRandomId('li'),
@@ -331,6 +349,7 @@ export const InvoicesView: React.FC<{
           issueDate,
           dueDate,
           template,
+          watermarkConfig: sanitizeWatermarkConfig(watermarkConfig),
           items: cleanItems,
           ...totals,
           status: targetStatus === 'sent' && editingInv.status === 'draft' ? 'sent' : editingInv.status,
@@ -352,6 +371,7 @@ export const InvoicesView: React.FC<{
             dueDate,
             status: targetStatus,
             template,
+            watermarkConfig: sanitizeWatermarkConfig(watermarkConfig),
             items: cleanItems,
             ...totals,
             paymentInstructions,
@@ -403,6 +423,7 @@ export const InvoicesView: React.FC<{
         dueDate: addDaysIso(today, businessProfile?.defaultDueDays ?? 15),
         status: 'draft',
         template: inv.template,
+        ...(inv.watermarkConfig ? { watermarkConfig: sanitizeWatermarkConfig(inv.watermarkConfig) } : {}),
         items: inv.items,
         subtotalCents: inv.subtotalCents,
         discountCents: inv.discountCents,
@@ -425,6 +446,8 @@ export const InvoicesView: React.FC<{
     setPdfBusyId(inv.id);
     try {
       const client = clients.find((c) => c.id === inv.clientId);
+      const effectiveWatermark = inv.watermarkConfig ?? businessProfile?.watermarkConfig;
+      const resolvedWm = resolveWatermarkDisplay(effectiveWatermark, inv.status);
       await downloadPdfFromEndpoint(
         '/api/pdf/document',
         {
@@ -434,6 +457,14 @@ export const InvoicesView: React.FC<{
           issueDate: inv.issueDate,
           dueDate: inv.dueDate,
           status: inv.status,
+          watermark: resolvedWm
+            ? {
+                text: resolvedWm.text,
+                opacityPct: resolvedWm.opacityPct,
+                angle: resolvedWm.angle,
+                color: resolvedWm.color,
+              }
+            : null,
           business: {
             businessName: businessProfile?.businessName || 'InvoicifyPro Business',
             ownerName: businessProfile?.ownerName,
@@ -541,7 +572,50 @@ export const InvoicesView: React.FC<{
     });
   }, [invoices, search, statusFilter]);
 
-  const activeTemplate = TEMPLATES.find((t) => t.id === template) || TEMPLATES[0];
+  const selectedPreviewInv = useMemo(
+    () => (selectedPreviewId ? invoices.find((i) => i.id === selectedPreviewId) || null : null),
+    [invoices, selectedPreviewId]
+  );
+
+  const previewTemplate: InvoiceTemplate = selectedPreviewInv
+    ? previewTemplateOverride[selectedPreviewInv.id] || selectedPreviewInv.template || 'corporate'
+    : 'corporate';
+
+  const previewWatermark: WatermarkConfig = selectedPreviewInv
+    ? previewWatermarkOverride[selectedPreviewInv.id] ||
+      selectedPreviewInv.watermarkConfig ||
+      businessProfile?.watermarkConfig ||
+      DEFAULT_WATERMARK_CONFIG
+    : DEFAULT_WATERMARK_CONFIG;
+
+  const openPreview = (inv: Invoice) => {
+    setSelectedPreviewId(inv.id);
+  };
+
+  const handlePreviewTemplateChange = async (nextTpl: SelectableInvoiceTemplate) => {
+    if (!selectedPreviewInv) return;
+    setPreviewTemplateOverride((prev) => ({ ...prev, [selectedPreviewInv.id]: nextTpl }));
+    if (selectedPreviewInv.status !== 'void' && selectedPreviewInv.status !== 'refunded') {
+      try {
+        await updateInvoice(selectedPreviewInv, { template: nextTpl });
+      } catch {
+        // Preview remains responsive immediately even if offline/pending
+      }
+    }
+  };
+
+  const handlePreviewWatermarkChange = async (nextWm: WatermarkConfig) => {
+    if (!selectedPreviewInv) return;
+    const cleanWm = sanitizeWatermarkConfig(nextWm);
+    setPreviewWatermarkOverride((prev) => ({ ...prev, [selectedPreviewInv.id]: cleanWm }));
+    if (selectedPreviewInv.status !== 'void' && selectedPreviewInv.status !== 'refunded') {
+      try {
+        await updateInvoice(selectedPreviewInv, { watermarkConfig: cleanWm });
+      } catch {
+        // Preview remains responsive immediately even if offline/pending
+      }
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -586,7 +660,7 @@ export const InvoicesView: React.FC<{
         </div>
       </div>
 
-      {/* Invoices Table */}
+      {/* Split-Screen Invoice Table + Animated PDF-Style Preview Side Panel */}
       {filtered.length === 0 ? (
         <div className="bg-white border border-slate-200 rounded-xl p-12 text-center">
           <p className="font-display text-base font-semibold text-[#172033] mb-1">No matching invoices</p>
@@ -599,126 +673,306 @@ export const InvoicesView: React.FC<{
           </AnimatedButton>
         </div>
       ) : (
-        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-xs text-slate-500">
-                  <th className="text-left font-medium px-5 py-3">Invoice</th>
-                  <th className="text-left font-medium px-4 py-3">Client</th>
-                  <th className="text-left font-medium px-4 py-3">Due Date</th>
-                  <th className="text-left font-medium px-4 py-3">Status</th>
-                  <th className="text-right font-medium px-4 py-3">Total</th>
-                  <th className="text-right font-medium px-4 py-3">Balance</th>
-                  <th className="text-right font-medium px-5 py-3">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filtered.map((inv) => (
-                  <tr key={inv.id} className="hover:bg-slate-50/70 transition-colors">
-                    <td className="px-5 py-3.5 font-mono font-semibold text-[#172B4D]">
-                      {inv.invoiceNumber}
-                    </td>
-                    <td className="px-4 py-3.5">
-                      <p className="font-medium text-[#172033]">{inv.clientName}</p>
-                      <p className="text-xs text-slate-500">{inv.clientEmail}</p>
-                    </td>
-                    <td className="px-4 py-3.5 text-xs text-slate-600 tabular-nums">{inv.dueDate}</td>
-                    <td className="px-4 py-3.5">
-                      <StatusBadge status={inv.status} />
-                    </td>
-                    <td className="px-4 py-3.5 text-right font-mono tabular-nums text-[#172033]">
-                      {formatUsd(inv.totalCents)}
-                    </td>
-                    <td className="px-4 py-3.5 text-right font-mono font-semibold tabular-nums text-[#172033]">
-                      {formatUsd(inv.balanceDueCents)}
-                    </td>
-                    <td className="px-5 py-3.5 text-right">
-                      <div className="inline-flex items-center gap-1.5 flex-wrap justify-end">
-                        {inv.status !== 'void' && inv.status !== 'refunded' && (
-                          <button
-                            type="button"
-                            onClick={() => openBuilder(inv)}
-                            className="px-2 py-1 text-xs font-medium text-[#2563EB] hover:bg-blue-50 rounded cursor-pointer"
-                          >
-                            Edit
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => handleDownloadPdf(inv)}
-                          disabled={pdfBusyId === inv.id}
-                          title="Download PDF"
-                          className="p-1.5 text-slate-600 hover:text-[#172B4D] hover:bg-slate-100 rounded cursor-pointer"
+        <div className="flex flex-col lg:flex-row gap-6 items-start">
+          {/* Left: Invoice Table */}
+          <div className="flex-1 min-w-0 w-full bg-white border border-slate-200 rounded-xl overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-xs text-slate-500">
+                    <th className="text-left font-medium px-5 py-3">Invoice</th>
+                    <th className="text-left font-medium px-4 py-3">Client</th>
+                    <th className="text-left font-medium px-4 py-3">Due Date</th>
+                    <th className="text-left font-medium px-4 py-3">Status</th>
+                    <th className="text-right font-medium px-4 py-3">Total</th>
+                    <th className="text-right font-medium px-4 py-3">Balance</th>
+                    <th className="text-right font-medium px-5 py-3">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filtered.map((inv) => {
+                    const isSelected = selectedPreviewInv?.id === inv.id;
+                    return (
+                      <tr
+                        key={inv.id}
+                        onClick={() => openPreview(inv)}
+                        className={`cursor-pointer transition-colors ${
+                          isSelected ? 'bg-blue-50/70' : 'hover:bg-slate-50/70'
+                        }`}
+                      >
+                        <td className="px-5 py-3.5 font-mono font-semibold text-[#172B4D]">
+                          <span className={isSelected ? 'text-[#2563EB]' : ''}>{inv.invoiceNumber}</span>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <p className="font-medium text-[#172033] truncate max-w-[180px]">{inv.clientName}</p>
+                          {!selectedPreviewInv && (
+                            <p className="text-xs text-slate-500 truncate max-w-[200px]">{inv.clientEmail}</p>
+                          )}
+                        </td>
+                        <td className="px-4 py-3.5 text-xs text-slate-600 tabular-nums whitespace-nowrap">
+                          {inv.dueDate}
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <StatusBadge status={inv.status} />
+                        </td>
+                        <td className="px-4 py-3.5 text-right font-mono tabular-nums text-[#172033] whitespace-nowrap">
+                          {formatUsd(inv.totalCents)}
+                        </td>
+                        <td className="px-4 py-3.5 text-right font-mono font-semibold tabular-nums text-[#172033] whitespace-nowrap">
+                          {formatUsd(inv.balanceDueCents)}
+                        </td>
+                        <td
+                          className="px-5 py-3.5 text-right"
+                          onClick={(e) => e.stopPropagation()}
                         >
-                          <Download className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setSendModalInv(inv)}
-                          title="Send / Share Portal Link"
-                          className="p-1.5 text-slate-600 hover:text-[#2563EB] hover:bg-blue-50 rounded cursor-pointer"
-                        >
-                          <Mail className="w-3.5 h-3.5" />
-                        </button>
-                        {inv.balanceDueCents > 0 && inv.status !== 'void' && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setPaymentModalInv(inv);
-                              setPayAmountDollars(centsToDollarsInput(inv.balanceDueCents));
-                              setPayDate(todayIso());
-                              setPayRef('');
-                            }}
-                            title="Record Payment"
-                            className="p-1.5 text-[#16A34A] hover:bg-emerald-50 rounded cursor-pointer"
-                          >
-                            <CreditCard className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => handleDuplicate(inv)}
-                          title="Duplicate"
-                          className="p-1.5 text-slate-500 hover:text-[#172033] hover:bg-slate-100 rounded cursor-pointer"
-                        >
-                          <Copy className="w-3.5 h-3.5" />
-                        </button>
-                        {inv.status === 'draft' ? (
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              await deleteDraftInvoice(inv.id);
-                              notify('info', 'Draft deleted', inv.invoiceNumber);
-                            }}
-                            title="Delete Draft"
-                            className="p-1.5 text-red-500 hover:bg-red-50 rounded cursor-pointer"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        ) : (
-                          inv.status !== 'void' &&
-                          inv.status !== 'paid' && (
+                          <div className="inline-flex items-center gap-1 flex-wrap justify-end">
                             <button
                               type="button"
-                              onClick={async () => {
-                                await updateInvoice(inv, { status: 'void' });
-                                notify('info', 'Invoice voided', inv.invoiceNumber);
-                              }}
-                              title="Void Invoice"
-                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded cursor-pointer"
+                              onClick={() => openPreview(inv)}
+                              title="Preview Invoice"
+                              className={`p-1.5 rounded cursor-pointer transition-colors ${
+                                isSelected
+                                  ? 'text-[#2563EB] bg-blue-100'
+                                  : 'text-slate-600 hover:text-[#2563EB] hover:bg-blue-50'
+                              }`}
                             >
-                              <XCircle className="w-3.5 h-3.5" />
+                              <Eye className="w-3.5 h-3.5" />
                             </button>
-                          )
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                            {inv.status !== 'void' && inv.status !== 'refunded' && (
+                              <button
+                                type="button"
+                                onClick={() => openBuilder(inv)}
+                                className="px-2 py-1 text-xs font-medium text-[#2563EB] hover:bg-blue-50 rounded cursor-pointer"
+                              >
+                                Edit
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleDownloadPdf(inv)}
+                              disabled={pdfBusyId === inv.id}
+                              title="Download PDF"
+                              className="p-1.5 text-slate-600 hover:text-[#172B4D] hover:bg-slate-100 rounded cursor-pointer"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setSendModalInv(inv)}
+                              title="Send / Share Portal Link"
+                              className="p-1.5 text-slate-600 hover:text-[#2563EB] hover:bg-blue-50 rounded cursor-pointer"
+                            >
+                              <Mail className="w-3.5 h-3.5" />
+                            </button>
+                            {inv.balanceDueCents > 0 && inv.status !== 'void' && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPaymentModalInv(inv);
+                                  setPayAmountDollars(centsToDollarsInput(inv.balanceDueCents));
+                                  setPayDate(todayIso());
+                                  setPayRef('');
+                                }}
+                                title="Record Payment"
+                                className="p-1.5 text-[#16A34A] hover:bg-emerald-50 rounded cursor-pointer"
+                              >
+                                <CreditCard className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleDuplicate(inv)}
+                              title="Duplicate"
+                              className="p-1.5 text-slate-500 hover:text-[#172033] hover:bg-slate-100 rounded cursor-pointer"
+                            >
+                              <Copy className="w-3.5 h-3.5" />
+                            </button>
+                            {inv.status === 'draft' ? (
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  await deleteDraftInvoice(inv.id);
+                                  if (selectedPreviewId === inv.id) setSelectedPreviewId(null);
+                                  notify('info', 'Draft deleted', inv.invoiceNumber);
+                                }}
+                                title="Delete Draft"
+                                className="p-1.5 text-red-500 hover:bg-red-50 rounded cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            ) : (
+                              inv.status !== 'void' &&
+                              inv.status !== 'paid' && (
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    await updateInvoice(inv, { status: 'void' });
+                                    notify('info', 'Invoice voided', inv.invoiceNumber);
+                                  }}
+                                  title="Void Invoice"
+                                  className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded cursor-pointer"
+                                >
+                                  <XCircle className="w-3.5 h-3.5" />
+                                </button>
+                              )
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
+
+          {/* Right: Animated Split-Screen PDF Preview Side Panel */}
+          <AnimatePresence>
+            {selectedPreviewInv && (
+              <motion.aside
+                key="invoice-split-preview-panel"
+                initial={reduced ? false : { opacity: 0, x: 28, scale: 0.98 }}
+                animate={{ opacity: 1, x: 0, scale: 1 }}
+                exit={reduced ? undefined : { opacity: 0, x: 24, scale: 0.98 }}
+                transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+                aria-label="Invoice PDF preview panel"
+                className="w-full lg:w-[460px] xl:w-[520px] shrink-0 lg:sticky lg:top-20 bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden"
+              >
+                {/* Side Panel Toolbar */}
+                <div className="px-4 py-3.5 border-b border-slate-200 flex items-center justify-between gap-3 bg-white">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="font-mono text-sm font-bold text-[#172B4D] truncate">
+                      {selectedPreviewInv.invoiceNumber}
+                    </span>
+                    <StatusBadge status={selectedPreviewInv.status} />
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {selectedPreviewInv.status !== 'void' && selectedPreviewInv.status !== 'refunded' && (
+                      <AnimatedButton
+                        size="sm"
+                        variant="secondary"
+                        onClick={() =>
+                          openBuilder({
+                            ...selectedPreviewInv,
+                            template: previewTemplate,
+                            watermarkConfig: previewWatermark,
+                          })
+                        }
+                      >
+                        Edit
+                      </AnimatedButton>
+                    )}
+                    <AnimatedButton
+                      size="sm"
+                      variant="secondary"
+                      loading={pdfBusyId === selectedPreviewInv.id}
+                      onClick={() =>
+                        handleDownloadPdf({
+                          ...selectedPreviewInv,
+                          template: previewTemplate,
+                          watermarkConfig: previewWatermark,
+                        })
+                      }
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>PDF</span>
+                    </AnimatedButton>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPreviewId(null)}
+                      aria-label="Close preview panel"
+                      className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Layout Selector & PDF-Style Paper Sheet */}
+                <div className="p-4 space-y-4 max-h-[calc(100vh-10rem)] overflow-y-auto">
+                  <InvoiceTemplateSelector
+                    value={previewTemplate}
+                    onChange={handlePreviewTemplateChange}
+                    watermark={previewWatermark}
+                    onWatermarkChange={handlePreviewWatermarkChange}
+                    invoiceStatus={selectedPreviewInv.status}
+                    label="Layout & Watermark Settings"
+                    instanceId="split-preview"
+                  />
+
+                  <div className="bg-slate-100/80 border border-slate-200 rounded-xl p-3 sm:p-4">
+                    <AnimatePresence mode="wait">
+                      <motion.div
+                        key={selectedPreviewInv.id}
+                        initial={reduced ? false : { opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={reduced ? undefined : { opacity: 0, y: -6 }}
+                        transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                        className="shadow-md rounded-xl overflow-hidden"
+                      >
+                        <InvoicePreview
+                          template={previewTemplate}
+                          watermark={previewWatermark}
+                          businessName={businessProfile?.businessName || 'Your Business'}
+                          businessEmail={businessProfile?.businessEmail}
+                          businessAddress={businessProfile?.address}
+                          businessPhone={businessProfile?.phone}
+                          invoiceNumber={selectedPreviewInv.invoiceNumber}
+                          issueDate={selectedPreviewInv.issueDate}
+                          dueDate={selectedPreviewInv.dueDate}
+                          status={selectedPreviewInv.status}
+                          clientName={selectedPreviewInv.clientName}
+                          clientEmail={selectedPreviewInv.clientEmail}
+                          clientAddress={
+                            clients.find((c) => c.id === selectedPreviewInv.clientId)?.billingAddress
+                          }
+                          items={selectedPreviewInv.items}
+                          subtotalCents={selectedPreviewInv.subtotalCents}
+                          discountCents={selectedPreviewInv.discountCents}
+                          taxRateLabel={`${businessProfile?.taxLabel || 'Sales Tax'} (${((selectedPreviewInv.taxRateBps || 0) / 100).toFixed(2).replace(/\.00$/, '')}%)`}
+                          taxCents={selectedPreviewInv.taxCents}
+                          totalCents={selectedPreviewInv.totalCents}
+                          amountPaidCents={selectedPreviewInv.amountPaidCents}
+                          balanceDueCents={selectedPreviewInv.balanceDueCents}
+                          paymentInstructions={selectedPreviewInv.paymentInstructions}
+                          notes={selectedPreviewInv.notes}
+                        />
+                      </motion.div>
+                    </AnimatePresence>
+                    <p className="text-[10px] font-mono text-slate-400 text-center mt-2.5">
+                      US Letter (8.5&quot; &times; 11&quot;) &middot; PDF Preview
+                    </p>
+                  </div>
+
+                  {/* Quick Actions Footer */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setSendModalInv(selectedPreviewInv)}
+                      className="inline-flex items-center gap-1.5 text-xs font-medium text-[#2563EB] hover:underline cursor-pointer"
+                    >
+                      <Mail className="w-3.5 h-3.5" />
+                      <span>Share or Email Invoice</span>
+                    </button>
+                    {selectedPreviewInv.balanceDueCents > 0 && selectedPreviewInv.status !== 'void' && (
+                      <AnimatedButton
+                        size="sm"
+                        onClick={() => {
+                          setPaymentModalInv(selectedPreviewInv);
+                          setPayAmountDollars(centsToDollarsInput(selectedPreviewInv.balanceDueCents));
+                          setPayDate(todayIso());
+                          setPayRef('');
+                        }}
+                      >
+                        <CreditCard className="w-3.5 h-3.5" />
+                        <span>Record Payment</span>
+                      </AnimatedButton>
+                    )}
+                  </div>
+                </div>
+              </motion.aside>
+            )}
+          </AnimatePresence>
         </div>
       )}
 
@@ -824,26 +1078,16 @@ export const InvoicesView: React.FC<{
                 </div>
               </div>
 
-              {/* Template Selector */}
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1.5">PDF Template</label>
-                <div className="flex flex-wrap gap-1.5">
-                  {TEMPLATES.map((tpl) => (
-                    <button
-                      key={tpl.id}
-                      type="button"
-                      onClick={() => setTemplate(tpl.id)}
-                      className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors cursor-pointer ${
-                        template === tpl.id
-                          ? 'bg-[#172B4D] text-white border-[#172B4D]'
-                          : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                      }`}
-                    >
-                      {tpl.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              {/* Template & Watermark Selector */}
+              <InvoiceTemplateSelector
+                value={template}
+                onChange={(nextTpl) => setTemplate(nextTpl)}
+                watermark={watermarkConfig}
+                onWatermarkChange={(nextWm) => setWatermarkConfig(nextWm)}
+                invoiceStatus={editingInv?.status || 'draft'}
+                label="Layout & PDF Watermark Settings"
+                instanceId="builder"
+              />
 
               {/* Line Items */}
               <div className="space-y-2.5">
@@ -991,84 +1235,31 @@ export const InvoicesView: React.FC<{
 
             {/* Right Live Animated Preview & AI Health Check */}
             <div className="lg:col-span-5 space-y-4">
-              <motion.div
-                key={template}
-                initial={reduced ? false : { opacity: 0.7, scale: 0.99 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.2 }}
-                className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm"
-              >
-                <div
-                  style={{ backgroundColor: activeTemplate.headerBg }}
-                  className="px-5 py-4 text-white flex items-center justify-between"
-                >
-                  <div>
-                    <p className="font-display font-bold text-sm">
-                      {businessProfile?.businessName || 'Your Business'}
-                    </p>
-                    <p className="text-[11px] text-slate-300">{businessProfile?.businessEmail}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-[10px] tracking-wider uppercase text-slate-300">Invoice</p>
-                    <p className="font-mono font-bold text-sm">{invoiceNumber}</p>
-                  </div>
-                </div>
-
-                <div className="p-5 space-y-4 text-xs">
-                  <div className="flex justify-between">
-                    <div>
-                      <p className="text-slate-400">Bill To</p>
-                      <p className="font-semibold text-[#172033]">
-                        {selectedClientObj?.name || 'Select a client'}
-                      </p>
-                      {selectedClientObj?.email && (
-                        <p className="text-slate-500">{selectedClientObj.email}</p>
-                      )}
-                    </div>
-                    <div className="text-right tabular-nums">
-                      <p className="text-slate-400">Due Date</p>
-                      <p className="font-semibold text-[#172033]">{dueDate}</p>
-                    </div>
-                  </div>
-
-                  <div className="border-t border-b border-slate-100 py-2 space-y-1.5">
-                    {items.map((it) => (
-                      <div key={it.id} className="flex justify-between gap-3">
-                        <span className="text-slate-700 truncate">
-                          {it.description || 'Line item'} ({it.quantity})
-                        </span>
-                        <span className="font-mono font-medium text-[#172033] tabular-nums shrink-0">
-                          {formatUsd(it.totalCents)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="space-y-1 tabular-nums">
-                    <div className="flex justify-between text-slate-500">
-                      <span>Subtotal</span>
-                      <span className="font-mono">{formatUsd(totals.subtotalCents)}</span>
-                    </div>
-                    {totals.discountCents > 0 && (
-                      <div className="flex justify-between text-slate-500">
-                        <span>Discount</span>
-                        <span className="font-mono">-{formatUsd(totals.discountCents)}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between text-slate-500">
-                      <span>Tax ({taxPct || 0}%)</span>
-                      <span className="font-mono">{formatUsd(totals.taxCents)}</span>
-                    </div>
-                    <div
-                      style={{ color: activeTemplate.accent }}
-                      className="flex justify-between font-bold text-sm pt-2 border-t border-slate-200"
-                    >
-                      <span>Total Due</span>
-                      <span className="font-mono">{formatUsd(totals.balanceDueCents)}</span>
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
+              <InvoicePreview
+                template={template}
+                watermark={watermarkConfig}
+                businessName={businessProfile?.businessName || 'Your Business'}
+                businessEmail={businessProfile?.businessEmail}
+                businessAddress={businessProfile?.address}
+                businessPhone={businessProfile?.phone}
+                invoiceNumber={invoiceNumber}
+                issueDate={issueDate}
+                dueDate={dueDate}
+                status={editingInv?.status || 'draft'}
+                clientName={selectedClientObj?.name || 'Select a client'}
+                clientEmail={selectedClientObj?.email}
+                clientAddress={selectedClientObj?.billingAddress}
+                items={items}
+                subtotalCents={totals.subtotalCents}
+                discountCents={totals.discountCents}
+                taxRateLabel={`${businessProfile?.taxLabel || 'Sales Tax'} (${taxPct || 0}%)`}
+                taxCents={totals.taxCents}
+                totalCents={totals.totalCents}
+                amountPaidCents={totals.amountPaidCents}
+                balanceDueCents={totals.balanceDueCents}
+                paymentInstructions={paymentInstructions}
+                notes={notes}
+              />
 
               {/* AI Health Check */}
               <div className="bg-[#F5F7FA] border border-slate-200 rounded-xl p-4 space-y-3">

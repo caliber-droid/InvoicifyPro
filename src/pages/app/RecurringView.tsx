@@ -197,7 +197,9 @@ export const RecurringView: React.FC<{
         businessProfile.nextInvoiceNumber || 1,
         businessProfile.invoiceNumberFormat || 'INV-',
         businessProfile.businessName,
-        businessProfile.businessEmail
+        businessProfile.businessEmail,
+        businessProfile.defaultTemplate || 'corporate',
+        businessProfile.watermarkConfig
       );
       notify('success', `Invoice ${res.invoiceNumber} generated`, `Created from "${profile.title}".`);
     } catch (err: any) {

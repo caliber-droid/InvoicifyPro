@@ -61,6 +61,18 @@ service cloud.firestore {
       );
     }
 
+    function isValidWatermarkConfig(wm) {
+      return wm is map
+        && wm.keys().hasAll(['enabled', 'mode', 'customText', 'opacityPct', 'angle', 'color'])
+        && wm.keys().hasOnly(['enabled', 'mode', 'customText', 'opacityPct', 'angle', 'color'])
+        && wm.enabled is bool
+        && wm.mode in ['status', 'custom']
+        && wm.customText is string && wm.customText.size() <= 40
+        && isIntRange(wm.opacityPct, 5, 50)
+        && isIntRange(wm.angle, -60, 60)
+        && wm.color is string && wm.color.size() >= 4 && wm.color.size() <= 16;
+    }
+
     // --- Validation Blueprints ---
 
     function isValidUserAccount(data) {
@@ -88,8 +100,8 @@ service cloud.firestore {
           'address', 'logoDataUrl', 'businessType', 'industry', 'taxIdLast4',
           'defaultCurrency', 'defaultPaymentTerms', 'invoiceNumberFormat',
           'nextInvoiceNumber', 'defaultTaxRateBps', 'taxLabel', 'preferredPaymentMethods',
-          'timezone', 'defaultDueDays', 'reminderSchedule', 'notificationPrefs',
-          'createdAt', 'updatedAt'
+          'timezone', 'defaultDueDays', 'defaultTemplate', 'watermarkConfig',
+          'reminderSchedule', 'notificationPrefs', 'createdAt', 'updatedAt'
         ])
         && isValidId(data.ownerId)
         && isStr(data.businessName, 1, 160)
@@ -115,6 +127,8 @@ service cloud.firestore {
         ))
         && isOptStr(data, 'timezone', 80)
         && isIntRange(data.defaultDueDays, 0, 365)
+        && (!('defaultTemplate' in data) || data.defaultTemplate in ['minimal', 'corporate', 'modern', 'creative', 'elegant', 'professional'])
+        && (!('watermarkConfig' in data) || isValidWatermarkConfig(data.watermarkConfig))
         && (!('reminderSchedule' in data) || data.reminderSchedule is map)
         && (!('notificationPrefs' in data) || data.notificationPrefs is map)
         && data.createdAt is timestamp
@@ -150,7 +164,7 @@ service cloud.firestore {
         ])
         && data.keys().hasOnly([
           'ownerId', 'clientId', 'clientName', 'clientEmail', 'invoiceNumber',
-          'issueDate', 'dueDate', 'status', 'template', 'items',
+          'issueDate', 'dueDate', 'status', 'template', 'watermarkConfig', 'items',
           'subtotalCents', 'discountCents', 'taxRateBps', 'taxCents',
           'totalCents', 'amountPaidCents', 'balanceDueCents',
           'paymentInstructions', 'notes', 'terms', 'publicShareToken',
@@ -165,6 +179,7 @@ service cloud.firestore {
         && isStr(data.dueDate, 8, 20)
         && data.status in ['draft', 'sent', 'viewed', 'partially_paid', 'paid', 'overdue', 'void', 'refunded']
         && data.template in ['minimal', 'corporate', 'modern', 'creative', 'elegant', 'professional']
+        && (!('watermarkConfig' in data) || isValidWatermarkConfig(data.watermarkConfig))
         && isBoundedItemsList(data.items, 1, 50)
         && isIntRange(data.subtotalCents, 0, 1000000000)
         && isIntRange(data.discountCents, 0, 1000000000)
@@ -397,7 +412,7 @@ service cloud.firestore {
         ])
         && data.keys().hasOnly([
           'ownerId', 'kind', 'targetId', 'businessName', 'businessEmail', 'clientName',
-          'docNumber', 'issueDate', 'dueDate', 'template', 'items', 'subtotalCents',
+          'docNumber', 'issueDate', 'dueDate', 'template', 'watermarkConfig', 'items', 'subtotalCents',
           'discountCents', 'taxCents', 'totalCents', 'amountPaidCents', 'balanceDueCents',
           'status', 'notes', 'terms', 'clientDecision', 'clientComment', 'decidedAt',
           'createdAt', 'updatedAt'
@@ -412,6 +427,7 @@ service cloud.firestore {
         && isStr(data.issueDate, 8, 20)
         && isStr(data.dueDate, 8, 20)
         && isOptStr(data, 'template', 40)
+        && (!('watermarkConfig' in data) || isValidWatermarkConfig(data.watermarkConfig))
         && isBoundedItemsList(data.items, 1, 50)
         && isIntRange(data.subtotalCents, 0, 1000000000)
         && isIntRange(data.discountCents, 0, 1000000000)
@@ -486,8 +502,8 @@ service cloud.firestore {
               'address', 'logoDataUrl', 'businessType', 'industry', 'taxIdLast4',
               'defaultPaymentTerms', 'invoiceNumberFormat', 'nextInvoiceNumber',
               'defaultTaxRateBps', 'taxLabel', 'preferredPaymentMethods',
-              'timezone', 'defaultDueDays', 'reminderSchedule', 'notificationPrefs',
-              'updatedAt'
+              'timezone', 'defaultDueDays', 'defaultTemplate', 'watermarkConfig',
+              'reminderSchedule', 'notificationPrefs', 'updatedAt'
             ])
           )
         );
@@ -545,7 +561,7 @@ service cloud.firestore {
             (
               incoming().diff(existing()).affectedKeys().hasOnly([
                 'clientId', 'clientName', 'clientEmail', 'invoiceNumber',
-                'issueDate', 'dueDate', 'template', 'items', 'subtotalCents',
+                'issueDate', 'dueDate', 'template', 'watermarkConfig', 'items', 'subtotalCents',
                 'discountCents', 'taxRateBps', 'taxCents', 'totalCents',
                 'balanceDueCents', 'paymentInstructions', 'notes', 'terms',
                 'publicShareToken', 'updatedAt'
@@ -796,7 +812,7 @@ service cloud.firestore {
           (
             isOwnerUid(existing().ownerId) &&
             incoming().diff(existing()).affectedKeys().hasOnly([
-              'status', 'amountPaidCents', 'balanceDueCents', 'items',
+              'status', 'amountPaidCents', 'balanceDueCents', 'template', 'watermarkConfig', 'items',
               'subtotalCents', 'discountCents', 'taxCents', 'totalCents',
               'dueDate', 'notes', 'terms', 'updatedAt'
             ])

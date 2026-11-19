@@ -44,6 +44,12 @@ export interface PdfDocumentPayload {
     reference?: string;
     paymentDate: string;
   };
+  watermark?: {
+    text: string;
+    opacityPct?: number;
+    angle?: number;
+    color?: string;
+  } | null;
 }
 
 export interface MonthlyReportPayload {
@@ -76,36 +82,123 @@ const TEMPLATE_COLORS: Record<string, { primary: string; accent: string; surface
   professional: { primary: '#172B4D', accent: '#16A34A', surface: '#F0FDF4' },
 };
 
+function inferPdfWatermarkColor(text: string, status: string): string {
+  const s = status.toLowerCase();
+  const t = text.toUpperCase();
+  if (s === 'paid' || s === 'accepted' || t.includes('PAID') || t.includes('APPROVED')) {
+    return '#16A34A';
+  }
+  if (
+    s === 'overdue' ||
+    s === 'void' ||
+    s === 'rejected' ||
+    t.includes('OVERDUE') ||
+    t.includes('VOID') ||
+    t.includes('FINAL') ||
+    t.includes('PAST DUE')
+  ) {
+    return '#DC2626';
+  }
+  if (s === 'partially_paid' || t.includes('PARTIAL')) {
+    return '#D97706';
+  }
+  if (s === 'draft' || t.includes('DRAFT') || t.includes('COPY')) {
+    return '#64748B';
+  }
+  return '#172B4D';
+}
+
+function drawWatermarkOnPage(
+  doc: PDFKit.PDFDocument,
+  watermark: NonNullable<PdfDocumentPayload['watermark']>,
+  status: string
+) {
+  const cleanText = String(watermark.text || '').trim().slice(0, 40).toUpperCase();
+  if (!cleanText) return;
+
+  const opacity = Math.max(0.05, Math.min(0.5, Number(watermark.opacityPct ?? 14) / 100));
+  const angle = Math.max(-60, Math.min(60, Math.round(Number(watermark.angle ?? -32))));
+  const rawColor = typeof watermark.color === 'string' ? watermark.color.trim() : 'auto';
+  const color =
+    rawColor && rawColor !== 'auto' && /^#[0-9a-fA-F]{3,8}$/.test(rawColor)
+      ? rawColor
+      : inferPdfWatermarkColor(cleanText, status);
+
+  doc.save();
+  const cx = doc.page.width / 2;
+  const cy = doc.page.height / 2;
+  doc.translate(cx, cy);
+  doc.rotate(angle, { origin: [0, 0] });
+
+  const len = cleanText.length;
+  const fontSize = len <= 6 ? 86 : len <= 12 ? 64 : len <= 20 ? 46 : 32;
+  doc.font('Helvetica-Bold').fontSize(fontSize);
+  doc.fillColor(color).fillOpacity(opacity);
+  const textWidth = doc.widthOfString(cleanText);
+  const textHeight = doc.currentLineHeight();
+  doc.text(cleanText, -textWidth / 2, -textHeight / 2, {
+    lineBreak: false,
+  });
+  doc.restore();
+}
+
 export function generateDocumentPdf(payload: PdfDocumentPayload): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: 'LETTER', margin: 48 });
+    const doc = new PDFDocument({ size: 'LETTER', margin: 48, bufferPages: true });
     const chunks: Buffer[] = [];
     doc.on('data', (chunk) => chunks.push(chunk));
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
 
-    const palette = TEMPLATE_COLORS[payload.template || 'corporate'] || TEMPLATE_COLORS.corporate;
+    const tpl = payload.template || 'corporate';
+    const palette = TEMPLATE_COLORS[tpl] || TEMPLATE_COLORS.corporate;
 
-    // Header band
-    doc.rect(0, 0, doc.page.width, 108).fill(palette.primary);
-    doc.fillColor('#FFFFFF').font('Helvetica-Bold').fontSize(20).text(payload.business.businessName || 'InvoicifyPro Business', 48, 34);
-    doc.font('Helvetica').fontSize(9.5).fillColor('#CBD5E1');
+    const docHeading =
+      payload.kind === 'estimate' ? 'ESTIMATE' : payload.kind === 'receipt' ? 'PAYMENT RECEIPT' : 'INVOICE';
     const bizLines = [
       payload.business.businessEmail,
       payload.business.phone,
       payload.business.address,
       payload.business.website,
     ].filter(Boolean);
-    doc.text(bizLines.join('  •  '), 48, 62, { width: 340 });
 
-    const docHeading =
-      payload.kind === 'estimate' ? 'ESTIMATE' : payload.kind === 'receipt' ? 'PAYMENT RECEIPT' : 'INVOICE';
-    doc.fillColor('#FFFFFF').font('Helvetica-Bold').fontSize(22).text(docHeading, 400, 32, { align: 'right', width: 164 });
-    doc.font('Helvetica').fontSize(10).fillColor('#93C5FD').text(`#${payload.docNumber}`, 400, 60, { align: 'right', width: 164 });
-    doc.font('Helvetica-Bold').fontSize(9).fillColor('#FFFFFF').text(payload.status.toUpperCase().replace('_', ' '), 400, 76, {
-      align: 'right',
-      width: 164,
-    });
+    if (tpl === 'minimal') {
+      doc.rect(0, 0, doc.page.width, 108).fill('#FFFFFF');
+      doc.moveTo(48, 104).lineTo(564, 104).strokeColor('#CBD5E1').lineWidth(1).stroke();
+      doc.fillColor('#172033').font('Helvetica-Bold').fontSize(20).text(payload.business.businessName || 'InvoicifyPro Business', 48, 34);
+      doc.font('Helvetica').fontSize(9.5).fillColor('#64748B').text(bizLines.join('  •  '), 48, 62, { width: 340 });
+      doc.fillColor('#172033').font('Helvetica-Bold').fontSize(22).text(docHeading, 400, 32, { align: 'right', width: 164 });
+      doc.font('Helvetica').fontSize(10).fillColor('#475569').text(`#${payload.docNumber}`, 400, 60, { align: 'right', width: 164 });
+      doc.font('Helvetica-Bold').fontSize(9).fillColor('#64748B').text(payload.status.toUpperCase().replace('_', ' '), 400, 76, {
+        align: 'right',
+        width: 164,
+      });
+    } else if (tpl === 'creative') {
+      doc.rect(0, 0, doc.page.width, 108).fill('#EFF6FF');
+      doc.rect(48, 30, 5, 56).fill('#2563EB');
+      doc.fillColor('#172B4D').font('Helvetica-Bold').fontSize(20).text(payload.business.businessName || 'InvoicifyPro Business', 64, 34);
+      doc.font('Helvetica').fontSize(9.5).fillColor('#475569').text(bizLines.join('  •  '), 64, 62, { width: 324 });
+      doc.fillColor('#1E293B').font('Helvetica-Bold').fontSize(22).text(docHeading, 400, 32, { align: 'right', width: 164 });
+      doc.font('Helvetica').fontSize(10).fillColor('#2563EB').text(`#${payload.docNumber}`, 400, 60, { align: 'right', width: 164 });
+      doc.font('Helvetica-Bold').fontSize(9).fillColor('#172B4D').text(payload.status.toUpperCase().replace('_', ' '), 400, 76, {
+        align: 'right',
+        width: 164,
+      });
+    } else {
+      // Corporate / Modern / Fallback header band
+      doc.rect(0, 0, doc.page.width, 108).fill(palette.primary);
+      if (tpl === 'modern') {
+        doc.rect(0, 0, doc.page.width, 6).fill('#0284C7');
+      }
+      doc.fillColor('#FFFFFF').font('Helvetica-Bold').fontSize(20).text(payload.business.businessName || 'InvoicifyPro Business', 48, 34);
+      doc.font('Helvetica').fontSize(9.5).fillColor('#CBD5E1').text(bizLines.join('  •  '), 48, 62, { width: 340 });
+      doc.fillColor('#FFFFFF').font('Helvetica-Bold').fontSize(22).text(docHeading, 400, 32, { align: 'right', width: 164 });
+      doc.font('Helvetica').fontSize(10).fillColor('#93C5FD').text(`#${payload.docNumber}`, 400, 60, { align: 'right', width: 164 });
+      doc.font('Helvetica-Bold').fontSize(9).fillColor('#FFFFFF').text(payload.status.toUpperCase().replace('_', ' '), 400, 76, {
+        align: 'right',
+        width: 164,
+      });
+    }
 
     // Bill To & Dates
     let y = 134;
@@ -217,6 +310,14 @@ export function generateDocumentPdf(payload: PdfDocumentPayload): Promise<Buffer
       doc.fillColor('#172B4D').font('Helvetica-Bold').fontSize(9).text('Terms & Conditions', 48, y);
       y += 13;
       doc.fillColor('#64748B').font('Helvetica').fontSize(8.5).text(payload.terms, 48, y, { width: 516 });
+    }
+
+    if (payload.watermark && payload.watermark.text && payload.watermark.text.trim()) {
+      const range = doc.bufferedPageRange();
+      for (let i = range.start; i < range.start + range.count; i++) {
+        doc.switchToPage(i);
+        drawWatermarkOnPage(doc, payload.watermark, payload.status);
+      }
     }
 
     doc.end();
